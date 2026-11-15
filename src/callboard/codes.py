@@ -2,10 +2,40 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Literal
 
-type Code = Literal["internal_error", "interrupted", "usage"]
+type Code = Literal[
+    "bellhop_failed",
+    "conversation_not_found",
+    "doctor_failed",
+    "group_exists",
+    "hls_unavailable",
+    "identity_ambiguous",
+    "identity_not_found",
+    "interrupted",
+    "invalid_environment",
+    "message_not_found",
+    "not_a_member",
+    "not_in_session",
+    "schema_too_new",
+    "store_unavailable",
+    "unknown_handle",
+    "usage",
+]
 
-INTERNAL_ERROR: Code = "internal_error"
+BELLHOP_FAILED: Code = "bellhop_failed"
+DOCTOR_FAILED: Code = "doctor_failed"
+HLS_UNAVAILABLE: Code = "hls_unavailable"
+IDENTITY_AMBIGUOUS: Code = "identity_ambiguous"
+IDENTITY_NOT_FOUND: Code = "identity_not_found"
+CONVERSATION_NOT_FOUND: Code = "conversation_not_found"
+GROUP_EXISTS: Code = "group_exists"
+MESSAGE_NOT_FOUND: Code = "message_not_found"
+NOT_A_MEMBER: Code = "not_a_member"
 INTERRUPTED: Code = "interrupted"
+INVALID_ENVIRONMENT: Code = "invalid_environment"
+NOT_IN_SESSION: Code = "not_in_session"
+SCHEMA_TOO_NEW: Code = "schema_too_new"
+STORE_UNAVAILABLE: Code = "store_unavailable"
+UNKNOWN_HANDLE: Code = "unknown_handle"
 USAGE: Code = "usage"
 
 OK_EXIT = 0
@@ -18,8 +48,21 @@ INTERRUPTED_EXIT = 130
 
 EXIT_CODES: Mapping[Code, int] = MappingProxyType(
     {
-        INTERNAL_ERROR: FAILURE_EXIT,
+        BELLHOP_FAILED: FAILURE_EXIT,
+        DOCTOR_FAILED: FAILURE_EXIT,
+        HLS_UNAVAILABLE: HLS_UNAVAILABLE_EXIT,
+        IDENTITY_AMBIGUOUS: NOT_FOUND_EXIT,
+        IDENTITY_NOT_FOUND: NOT_FOUND_EXIT,
+        CONVERSATION_NOT_FOUND: NOT_FOUND_EXIT,
+        GROUP_EXISTS: FAILURE_EXIT,
+        MESSAGE_NOT_FOUND: NOT_FOUND_EXIT,
+        NOT_A_MEMBER: NOT_FOUND_EXIT,
         INTERRUPTED: INTERRUPTED_EXIT,
+        INVALID_ENVIRONMENT: FAILURE_EXIT,
+        NOT_IN_SESSION: NOT_FOUND_EXIT,
+        SCHEMA_TOO_NEW: FAILURE_EXIT,
+        STORE_UNAVAILABLE: FAILURE_EXIT,
+        UNKNOWN_HANDLE: NOT_FOUND_EXIT,
         USAGE: USAGE_EXIT,
     }
 )

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "session": {
+    "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
+    "harness": "claude",
+    "title": "callboard",
+    "agent": "enki"
+  }
+}

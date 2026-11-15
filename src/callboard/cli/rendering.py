@@ -1,0 +1,77 @@
+from collections.abc import Sequence
+
+from callboard.models import Conversation, InboxEntry, Message, Receipt
+from callboard.refs import ref_of
+
+
+def message_json(item: Message) -> dict[str, object]:
+    return {
+        "id": item.id,
+        "conversation_id": item.conversation_id,
+        "sender": item.sender,
+        "body": item.body,
+        "parent_id": item.parent_id,
+        "created_at": item.created_at,
+    }
+
+
+def message_lines(item: Message) -> list[str]:
+    reply = f" (reply to {item.parent_id})" if item.parent_id else ""
+    first, *rest = item.body.split("\n")
+    return [
+        f"{item.id}  {item.created_at}  {item.sender}{reply}: {first}",
+        *(f"  {line}" for line in rest),
+    ]
+
+
+def messages_lines(items: Sequence[Message]) -> list[str]:
+    return [line for item in items for line in message_lines(item)]
+
+
+def conversation_json(found: Conversation, caller: str) -> dict[str, object]:
+    return {
+        "ref": ref_of(found.id, caller),
+        "id": found.id,
+        "kind": found.kind,
+        "name": found.name,
+        "subject": found.subject,
+        "project": found.project,
+    }
+
+
+def inbox_json(entry: InboxEntry, caller: str) -> dict[str, object]:
+    return {
+        **conversation_json(entry.conversation, caller),
+        "unread": entry.unread,
+        "mentions": entry.mentions,
+    }
+
+
+def inbox_line(entry: InboxEntry, caller: str, width: int) -> str:
+    mentions = entry.mentions
+    tail = f", {mentions} mention{'s' if mentions > 1 else ''}" if mentions else ""
+    return f"{ref_of(entry.conversation.id, caller):<{width}}  {entry.unread} unread{tail}"
+
+
+def receipt_json(receipt: Receipt) -> dict[str, object]:
+    return {
+        "recipient": receipt.recipient,
+        "ping": receipt.ping,
+        "ping_state": receipt.ping_state,
+        "bellhop_id": receipt.bellhop_id,
+        "inline": receipt.inline,
+        "read_at": receipt.read_at,
+    }
+
+
+def receipt_lines(items: Sequence[Receipt]) -> list[str]:
+    rows = [("recipient", "ping", "state", "read")] + [
+        (item.recipient, item.ping, item.ping_state or "-", item.read_at or "-") for item in items
+    ]
+    widths = [max(len(row[index]) for row in rows) for index in range(3)]
+    return [
+        "  ".join(
+            [*(cell.ljust(width) for cell, width in zip(row[:3], widths, strict=True)), row[3]]
+        )
+        for row in rows
+    ]

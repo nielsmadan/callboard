@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "ref": "group:ops",
+  "messages": [
+    {
+      "id": "cb_000000000002",
+      "conversation_id": "group:ops",
+      "sender": "enki",
+      "body": "@nanna please review",
+      "parent_id": null,
+      "created_at": "2026-11-14T09:00:00Z"
+    },
+    {
+      "id": "cb_000000000003",
+      "conversation_id": "group:ops",
+      "sender": "niels",
+      "body": "on it",
+      "parent_id": "cb_000000000002",
+      "created_at": "2026-11-14T09:00:00Z"
+    }
+  ]
+}

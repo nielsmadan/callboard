@@ -9,9 +9,13 @@ PACKAGE_ROOT = SOURCE_ROOT / "callboard"
 PACKAGE = "callboard"
 
 LAYERS: tuple[tuple[str, ...], ...] = (
-    ("__init__", "codes"),
-    ("errors",),
-    ("jsonout",),
+    ("__init__", "codes", "mentions"),
+    ("errors", "models"),
+    ("paths", "jsonout", "refs"),
+    ("store",),
+    ("identity", "conversations"),
+    ("receipts",),
+    ("messages",),
     ("cli",),
     ("__main__",),
 )
@@ -23,9 +27,32 @@ LAYER_OF: Mapping[str, int] = {
 IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "__init__": frozenset(),
     "codes": frozenset(),
+    "mentions": frozenset(),
     "errors": frozenset({"codes"}),
+    "models": frozenset(),
     "jsonout": frozenset({"errors"}),
-    "cli": frozenset({"codes", "errors", "jsonout"}),
+    "paths": frozenset({"errors"}),
+    "refs": frozenset({"errors"}),
+    "store": frozenset({"errors", "models"}),
+    "identity": frozenset({"codes", "errors", "models", "store"}),
+    "conversations": frozenset({"errors", "models", "refs", "store"}),
+    "receipts": frozenset({"conversations", "models"}),
+    "messages": frozenset({"conversations", "errors", "mentions", "models", "receipts", "store"}),
+    "cli": frozenset(
+        {
+            "codes",
+            "conversations",
+            "errors",
+            "identity",
+            "jsonout",
+            "messages",
+            "models",
+            "paths",
+            "receipts",
+            "refs",
+            "store",
+        }
+    ),
     "__main__": frozenset({"cli"}),
 }
 
@@ -33,8 +60,14 @@ SIBLING_IMPORTS_ALLOWED: Mapping[str, Mapping[str, frozenset[str]]] = {
     "cli": {
         "parsing": frozenset(),
         "presentation": frozenset(),
-        "dispatch": frozenset({"parsing", "presentation"}),
-        "__init__": frozenset({"dispatch", "presentation"}),
+        "rendering": frozenset(),
+        "context": frozenset(),
+        "commands": frozenset({"presentation"}),
+        "doctor": frozenset({"presentation"}),
+        "chat": frozenset({"context"}),
+        "reading": frozenset({"context", "presentation", "rendering"}),
+        "dispatch": frozenset({"chat", "commands", "doctor", "parsing", "presentation", "reading"}),
+        "__init__": frozenset({"dispatch", "parsing", "presentation"}),
     },
 }
 

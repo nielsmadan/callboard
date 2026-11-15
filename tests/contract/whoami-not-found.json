@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status": "error",
+  "exit_code": 3,
+  "error": {
+    "code": "target_not_found",
+    "message": "not inside a session hls knows",
+    "candidates": []
+  }
+}

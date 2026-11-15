@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "sessions": [
+    {
+      "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
+      "harness": "claude",
+      "title": "callboard",
+      "cwd": "/work/callboard",
+      "phase": "working",
+      "observed_at": "2026-11-14T09:11:58Z",
+      "agent": "enki",
+      "reachable": true,
+      "route": "claude-relay",
+      "pending": 0
+    },
+    {
+      "session_id": "7c1d0b5e-4a2f-4c8e-9d3b-1f6a2e8c0d47",
+      "harness": "codex",
+      "title": "reviewer",
+      "cwd": "/work/bellhop",
+      "phase": "idle",
+      "observed_at": "2026-11-14T09:10:31Z",
+      "agent": null,
+      "reachable": false,
+      "route": null,
+      "pending": 2
+    }
+  ]
+}
