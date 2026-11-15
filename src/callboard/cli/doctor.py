@@ -44,7 +44,7 @@ def check_data_dir(path: Path, uid: int) -> Check:
     try:
         info = path.stat()
     except ABSENT:
-        return Check("data_dir", "warn", f"{path} absent; created by the first callboard join")
+        return Check("data_dir", "warn", f"{path} absent; created by the first callboard command")
     except OSError as error:
         return Check("data_dir", "fail", f"cannot access {path}: {error.strerror}")
     if not stat.S_ISDIR(info.st_mode):
@@ -61,7 +61,7 @@ def check_store(path: Path) -> tuple[Check, list[Participant]]:
     try:
         path.stat()
     except ABSENT:
-        return Check("store", "warn", f"{path} absent; created by the first callboard join"), []
+        return Check("store", "warn", f"{path} absent; created by the first callboard command"), []
     except OSError as error:
         return Check("store", "fail", f"cannot access {path}: {error.strerror}"), []
     current = len(MIGRATIONS)

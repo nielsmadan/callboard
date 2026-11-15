@@ -22,7 +22,7 @@ sent cb_ec5a4723715e to @nanna
 - `--now` interrupts the recipient mid-turn. Use it only when waiting would do harm.
 - `--no-ping` stores the message without ringing.
 - Without TEXT, the text is read from stdin. An empty message is refused unless it has an
-  attachment.
+  attachment. A TEXT that starts with `-` goes after `--`: `callboard dm nanna -- "-x is gone"`.
 
 ## Reading (in nanna's session)
 
@@ -50,6 +50,9 @@ sent cb_7722d25347bb to @enki
 - A `<ref>` is `@handle` (your direct conversation with them), `group:<name>`, `mail:<id>` or a
   message id `cb_…`.
 - `--reply-to` must name a message in the same conversation.
+- Text output shows control characters, terminal escape sequences and text-direction controls
+  in a message as escapes (`\x1b`, `\r`, `\u202e`); line breaks and tabs stay as they are.
+  `--json` has the body unchanged.
 
 A short message that bellhop confirmed it delivered in full is already read, so `inbox` and `read`
 skip it; `history` shows it again. With bellhop answering `confirmed`:
@@ -89,7 +92,10 @@ sent cb_3e12ecfa07cf to group:release (mentions @utu)
 ```
 
 - The creator is always a member. `group add <name> <handle>` and `group remove <name> <handle>`
-  change members; only members can do that, and only members can send or read.
+  change members; only members can do that, and only members can send or read. A group name is
+  up to 64 lowercase letters, digits, `_` and `-`.
+- When the last member leaves, the group and its messages are deleted and its name can be used
+  again.
 - Only an `@handle` of a member rings that member. Everyone else gets the message unread, without
   a ping. `--now` makes the mentions interrupt.
 
@@ -136,7 +142,9 @@ trace-copy.log
 - `--attach PATH` is repeatable and works on `dm`, `group send`, `mail send` and `mail reply`.
 - Each file is copied into the store, and the same content is stored once. The limit is 50 MiB
   per file; set `max_attachment_bytes` to change it.
-- `--out` never overwrites an existing file.
+- Stored files are read-only (mode 0400) and shared by every message with the same content; a
+  send of content already stored puts back a stored file that was changed.
+- `--out` never overwrites an existing file and writes the copy with mode 0600.
 - `callboard doctor --prune` deletes stored files no message refers to, once they are an hour
   old.
 
@@ -149,7 +157,9 @@ callboard handed to `bellhop send` in a test run:
 callboard cb_8a4e4c69fbe3 dm from enki: short note
 ```
 
-Anything longer, or with attachments, arrives as a doorbell:
+Control characters in the message other than tab and newline show in the ping as escapes
+(`\x1b`, `\x07`), as in `read`; the stored message is unchanged. Anything longer, or with
+attachments, arrives as a doorbell:
 
 ```
 callboard cb_c26523f1a44d dm from enki (600 chars); read: callboard read cb_c26523f1a44d
@@ -173,7 +183,7 @@ callboard: ping nanna for cb_36790a564ee8: bellhop not found on PATH
 sent cb_36790a564ee8 to @nanna
 $ callboard doctor --reping
 ok    data_dir  ~/.local/share/callboard
-ok    store     schema version 1, 2 participants
+ok    store     schema version 2, 2 participants
 ok    bellhop   ~/.local/bin/bellhop
 ok    routes    2 routes resolve
 ok    config    ~/.config/callboard/config.toml absent; using the defaults
@@ -182,4 +192,7 @@ re-rang 1 receipts
 
 Without bellhop, callboard cannot ask which session you are in, so a command without `--as`
 exits 1 with `bellhop not found on PATH`. Each command gives bellhop 20 seconds in total;
-copying attachments and storing the message do not count against it.
+copying attachments and storing the message do not count against it. A bellhop call is never
+given less than bellhop's own worst case for it (10 seconds, or 20 for a send that may start an
+agent), so a call that starts late may run past the 20 seconds; no call starts once they are
+spent. A ping's `--confirm` wait is what is left after bellhop's 10 seconds, up to 5.

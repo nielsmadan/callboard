@@ -38,12 +38,12 @@ def _error(caught: pytest.ExceptionInfo[CallboardError]) -> tuple[str, int, str]
     return caught.value.code, caught.value.exit_code, str(caught.value)
 
 
-@pytest.mark.parametrize("handle", ["enki", "a", "0x", "agent_7", "re-view"])
+@pytest.mark.parametrize("handle", ["enki", "a", "0x", "agent_7", "re-view", "a" * 64])
 def test_valid_handles_pass(handle: str) -> None:
     assert validate_handle(handle) == handle
 
 
-@pytest.mark.parametrize("handle", ["", "Enki", "-x", "_x", "a b", "a.b", "é"])
+@pytest.mark.parametrize("handle", ["", "Enki", "-x", "_x", "a b", "a.b", "é", "a" * 65])
 def test_invalid_handles_are_usage_errors(handle: str) -> None:
     with pytest.raises(CallboardError) as caught:
         validate_handle(handle, "--as")
@@ -51,8 +51,8 @@ def test_invalid_handles_are_usage_errors(handle: str) -> None:
         "usage",
         2,
         (
-            f"--as '{handle}' is not a valid handle; use lowercase letters, digits, '_' and '-',"
-            " starting with a letter or digit"
+            f"--as '{handle}' is not a valid handle; use up to 64 lowercase letters, digits, '_'"
+            " and '-', starting with a letter or digit"
         ),
     )
 
@@ -60,7 +60,7 @@ def test_invalid_handles_are_usage_errors(handle: str) -> None:
 def test_whoami_reads_an_agent_bound_session(bellhop: FakeBellhop) -> None:
     bellhop.replay("whoami", "whoami.json")
     session = whoami(_bell(os.environ))
-    assert session == BellhopSession(ENKI_SESSION, "claude", "alpha", "enki")
+    assert session == BellhopSession(ENKI_SESSION, "enki")
     assert route_of(session) == "enki"
     assert bellhop.calls() == [["whoami", "--json"]]
 
@@ -68,7 +68,7 @@ def test_whoami_reads_an_agent_bound_session(bellhop: FakeBellhop) -> None:
 def test_whoami_without_an_agent_routes_by_session_id(bellhop: FakeBellhop) -> None:
     bellhop.replay("whoami", "whoami-no-agent.json")
     session = whoami(_bell(os.environ))
-    assert session == BellhopSession(UNNAMED_SESSION, "codex", "beta", None)
+    assert session == BellhopSession(UNNAMED_SESSION, None)
     assert route_of(session) == UNNAMED_SESSION
 
 
@@ -245,3 +245,16 @@ exit 5""",
     with pytest.raises(CallboardError) as caught:
         resolve_caller(conn, None, _bell({"PATH": str(tmp_path / "bin")}))
     assert _error(caught) == ("hls_unavailable", 5, "bellhop whoami: hls timed out")
+
+
+def test_a_caller_in_more_than_one_session_gets_no_join_hint(
+    conn: sqlite3.Connection, bellhop: FakeBellhop
+) -> None:
+    bellhop.replay("whoami", "whoami-caller-ambiguous.json")
+    with pytest.raises(CallboardError) as caught:
+        resolve_caller(conn, None, _bell(os.environ))
+    assert _error(caught) == (
+        "identity_ambiguous",
+        3,
+        "bellhop whoami: the caller runs inside more than one live session",
+    )

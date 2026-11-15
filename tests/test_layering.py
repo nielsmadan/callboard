@@ -36,7 +36,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "paths": frozenset({"errors"}),
     "refs": frozenset({"errors"}),
     "config": frozenset({"errors"}),
-    "bellhop_client": frozenset({"codes", "errors", "models"}),
+    "bellhop_client": frozenset({"codes", "errors", "models", "text"}),
     "attachments": frozenset({"errors", "models"}),
     "store": frozenset({"errors", "models"}),
     "identity": frozenset({"bellhop_client", "errors", "models", "store"}),

@@ -21,7 +21,8 @@
         "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
         "harness": "claude",
         "title": "alpha"
-      }
+      },
+      "body": "one"
     },
     {
       "id": "bh_000000000002",
@@ -41,7 +42,8 @@
         "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
         "harness": "claude",
         "title": "alpha"
-      }
+      },
+      "body": "two"
     }
   ]
 }

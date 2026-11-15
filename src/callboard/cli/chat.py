@@ -143,7 +143,15 @@ def _group_create(args: argparse.Namespace, runtime: Runtime) -> int:
     with as_caller(args, runtime, bellhop(runtime, settings(runtime))) as (conn, caller):
         created = create_group(conn, name, caller.handle, handles, args.project, runtime.clock())
     everyone = sorted({caller.handle, *handles})
-    print(f"created {created.id} (members: {', '.join(everyone)})")
+    payload = ok_payload(
+        {
+            "conversation": created.id,
+            "name": created.name,
+            "project": created.project,
+            "members": everyone,
+        }
+    )
+    emit(payload, [f"created {created.id} (members: {', '.join(everyone)})"], json_mode=args.json)
     return 0
 
 
@@ -152,7 +160,9 @@ def _group_add(args: argparse.Namespace, runtime: Runtime) -> int:
     handle = validate_handle(args.handle)
     with as_caller(args, runtime, bellhop(runtime, settings(runtime))) as (conn, caller):
         added = add_member(conn, name, caller.handle, handle, runtime.clock())
-    print(f"added {handle} to group:{name}" if added else f"{handle} is already in group:{name}")
+    line = f"added {handle} to group:{name}" if added else f"{handle} is already in group:{name}"
+    payload = ok_payload({"conversation": f"group:{name}", "handle": handle, "added": added})
+    emit(payload, [line], json_mode=args.json)
     return 0
 
 
@@ -160,8 +170,12 @@ def _group_remove(args: argparse.Namespace, runtime: Runtime) -> int:
     name = validate_handle(args.name, "group")
     handle = validate_handle(args.handle)
     with as_caller(args, runtime, bellhop(runtime, settings(runtime))) as (conn, caller):
-        remove_member(conn, name, caller.handle, handle)
-    print(f"removed {handle} from group:{name}")
+        emptied = remove_member(conn, name, caller.handle, handle)
+    gone = [f"group:{name} had no members left and is gone; its name is free"] if emptied else []
+    payload = ok_payload(
+        {"conversation": f"group:{name}", "handle": handle, "group_deleted": emptied}
+    )
+    emit(payload, [f"removed {handle} from group:{name}", *gone], json_mode=args.json)
     return 0
 
 

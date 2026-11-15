@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "status": "error",
+  "exit_code": 3,
+  "error": {
+    "code": "caller_unknown",
+    "message": "the caller runs inside more than one live session",
+    "candidates": [
+      "2e2042a9-937c-4e03-ba25-74b5ba14a58f (claude, alpha)",
+      "2e20ffff-0000-4000-8000-000000000002 (codex, beta)"
+    ]
+  }
+}

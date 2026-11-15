@@ -11,7 +11,7 @@ import pytest
 from callboard.cli.dispatch import run
 from callboard.paths import store_path
 from callboard.store import open_store
-from helpers import FakeBellhop, runtime
+from helpers import FakeBellhop, runtime, seed
 
 ENKI_SESSION = "2e2042a9-937c-4e03-ba25-74b5ba14a58f"
 UNNAMED_SESSION = "2e20ffff-0000-4000-8000-000000000002"
@@ -93,7 +93,7 @@ def test_join_outside_a_session_fails_and_stores_nothing(
     assert _callboard("join", "enki") == 3
     assert capsys.readouterr().err == (
         "callboard: bellhop whoami: CODEX_THREAD_ID=not-live is not a live session hooklinesinker lists;"
-        " to join without a session, run: callboard join <handle> --human\n"
+        " if you are a person at a terminal, run: callboard join <handle> --human\n"
     )
     assert not store_path(os.environ).exists()
 
@@ -148,7 +148,25 @@ def test_who_marks_the_caller_in_text(
     assert _callboard("--as", "niels", "who") == 0
     assert capsys.readouterr().out == (
         "   handle  kind   route\n   enki    agent  enki\n*  niels   human  -\n"
+        "* is you through --as\n"
     )
+
+
+def test_who_names_callboard_as_when_it_chose_the_caller(
+    bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bellhop.replay("whoami", "whoami.json")
+    assert _callboard("join", "enki") == 0
+    assert _callboard("join", "niels", "--human") == 0
+    monkeypatch.setenv("CALLBOARD_AS", "niels")
+    capsys.readouterr()
+    assert _callboard("who") == 0
+    assert capsys.readouterr().out.splitlines()[-2:] == [
+        "*  niels   human  -",
+        "* is you through $CALLBOARD_AS; unset it if this is not you",
+    ]
+    assert _callboard("who", "--json") == 0
+    assert json.loads(capsys.readouterr().out)["you_from"] == "CALLBOARD_AS"
 
 
 def test_who_outside_a_session_shows_no_caller(capsys: pytest.CaptureFixture[str]) -> None:
@@ -213,7 +231,7 @@ def test_joining_a_second_handle_moves_the_route_to_it(
     assert _callboard("join", "enki") == 0
     assert capsys.readouterr() == (
         "joined as enki (route enki)\n",
-        "callboard: moved route enki from 'enkii' to 'enki'\n",
+        "callboard: moved this session from 'enkii' to 'enki' (route enki)\n",
     )
     assert [row[:3] for row in _rows()] == [("enki", "agent", "enki"), ("enkii", "agent", None)]
     assert _callboard("who", "--json") == 0
@@ -251,12 +269,12 @@ def test_who_with_an_unknown_as_handle_exits_3_with_the_json_envelope(
 def test_who_on_a_newer_schema_exits_1(capsys: pytest.CaptureFixture[str]) -> None:
     assert _callboard("join", "niels", "--human") == 0
     with closing(sqlite3.connect(store_path(os.environ))) as conn:
-        conn.execute("UPDATE meta SET value = '2' WHERE key = 'schema_version'")
+        conn.execute("UPDATE meta SET value = '3' WHERE key = 'schema_version'")
         conn.commit()
     capsys.readouterr()
     assert _callboard("who") == 1
     assert capsys.readouterr().err == (
-        "callboard: store schema version 2 is newer than this callboard supports (1);"
+        "callboard: store schema version 3 is newer than this callboard supports (2);"
         " upgrade callboard\n"
     )
 
@@ -279,3 +297,151 @@ def test_as_after_the_command_is_honoured(capsys: pytest.CaptureFixture[str]) ->
     capsys.readouterr()
     assert _callboard("--as", "ghost", "who", "--as", "niels", "--json") == 0
     assert json.loads(capsys.readouterr().out)["you"] == "niels"
+
+
+def test_joining_by_agent_name_frees_the_handle_the_session_held_by_its_id(
+    bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bellhop.replay("whoami", "whoami-no-agent.json")
+    assert _callboard("join", "a") == 0
+    with closing(sqlite3.connect(store_path(os.environ))) as conn:
+        conn.execute("UPDATE participants SET route = ? WHERE handle = 'a'", (ENKI_SESSION,))
+        conn.commit()
+    bellhop.replay("whoami", "whoami.json")
+    capsys.readouterr()
+    assert _callboard("join", "enki") == 0
+    assert capsys.readouterr() == (
+        "joined as enki (route enki)\n",
+        "callboard: moved this session from 'a' to 'enki' (route enki)\n",
+    )
+    assert [(row[0], row[2]) for row in _rows()] == [("a", None), ("enki", "enki")]
+
+
+@pytest.mark.parametrize(
+    ("argv", "error"),
+    [
+        (
+            ("--as", "niels", "join", "enki"),
+            "join does not take --as; it joins the session it runs in",
+        ),
+        (("join", "enki", "--as", "x"), "unrecognized arguments: --as x"),
+    ],
+)
+def test_join_refuses_as(
+    argv: tuple[str, ...], error: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _callboard(*argv) == 2
+    assert capsys.readouterr().err == f"callboard: {error}\n"
+
+
+def test_an_argument_that_is_not_utf8_is_usage(capsys: pytest.CaptureFixture[str]) -> None:
+    assert _callboard("join", "niels", "--human", "--as", "x\udcff") == 2
+    assert capsys.readouterr().err == "callboard: an argument is not valid UTF-8 text\n"
+
+
+def _handle_taken(capsys: pytest.CaptureFixture[str], *argv: str) -> str:
+    capsys.readouterr()
+    assert _callboard(*argv, "--json") == 1
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "handle_taken"
+    return str(error["message"])
+
+
+@pytest.mark.parametrize(("handle", "route"), [("enki", "enki"), ("nanna", "nanna")])
+def test_join_human_cannot_take_a_handle_whose_agent_route_still_resolves(
+    bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str], handle: str, route: str
+) -> None:
+    seed((handle, route))
+    bellhop.replay("sessions", "sessions.json")
+    bellhop.replay("agents", "agents.json")
+    assert _handle_taken(capsys, "join", handle, "--human") == (
+        f"handle '{handle}' is taken by agent route {route}, which bellhop still knows;"
+        " pick another handle"
+    )
+    assert _rows()[0][:3] == (handle, "agent", route)
+
+
+def test_join_human_refuses_when_bellhop_cannot_say_the_session_ended(
+    bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bellhop.replay("whoami", "whoami.json")
+    assert _callboard("join", "enki") == 0
+    assert _handle_taken(capsys, "join", "enki", "--human") == (
+        "handle 'enki' is taken by agent route enki, and bellhop cannot say whether that route"
+        " still resolves (bellhop sessions printed no schema_version 1 JSON (exit 2): fake"
+        " bellhop: no fixture for 'sessions'); pick another handle"
+    )
+
+
+def test_join_human_takes_a_handle_whose_agent_session_ended(
+    bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed(("scribe", "gone-session"))
+    bellhop.replay("sessions", "sessions.json")
+    bellhop.replay("agents", "agents.json")
+    assert _callboard("join", "scribe", "--human") == 0
+    assert _rows()[0][:3] == ("scribe", "human", None)
+
+
+def test_an_agent_cannot_take_a_humans_handle(
+    bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _callboard("join", "niels", "--human") == 0
+    bellhop.replay("whoami", "whoami.json")
+    assert _handle_taken(capsys, "join", "niels") == (
+        "handle 'niels' is taken by a human; pick another handle"
+    )
+    assert _rows() == [("niels", "human", None, "2026-11-14T09:00:00Z")]
+
+
+def test_join_human_takes_an_agent_handle_that_lost_its_route(
+    bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bellhop.replay("whoami", "whoami.json")
+    assert _callboard("join", "enki") == 0
+    assert _callboard("join", "enkii") == 0
+    capsys.readouterr()
+    assert _callboard("join", "enki", "--human", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert (payload["participant"], payload["warnings"]) == (
+        {"handle": "enki", "kind": "human", "route": None, "created_at": "2026-11-14T09:00:00Z"},
+        ["rebound 'enki' from no route to human, no route"],
+    )
+
+
+def test_a_mistyped_flag_on_a_command_without_text_gets_no_dash_hint(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert _callboard("who", "-json") == 2
+    assert capsys.readouterr().err == "callboard: unrecognized arguments: -json\n"
+
+
+def test_a_dash_text_error_names_the_double_dash(capsys: pytest.CaptureFixture[str]) -> None:
+    assert _callboard("--as", "niels", "dm", "nanna", "-x") == 2
+    assert capsys.readouterr().err == (
+        "callboard: unrecognized arguments: -x; a TEXT that starts with '-' goes after --,"
+        " as in: callboard dm nanna -- -x\n"
+    )
+
+
+def test_join_json_names_the_participant_and_what_it_replaced(
+    bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bellhop.replay("whoami", "whoami.json")
+    assert _callboard("join", "enkii") == 0
+    capsys.readouterr()
+    assert _callboard("join", "enki", "--json") == 0
+    enki = {
+        "handle": "enki",
+        "kind": "agent",
+        "route": "enki",
+        "created_at": "2026-11-14T09:00:00Z",
+    }
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": 1,
+        "status": "ok",
+        "warnings": ["moved this session from 'enkii' to 'enki' (route enki)"],
+        "participant": enki,
+        "previous": None,
+        "displaced": ["enkii"],
+    }

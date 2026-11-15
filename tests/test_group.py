@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from callboard.mentions import mentioned
@@ -151,3 +153,44 @@ def test_group_text_comes_from_stdin_and_reply_to_stays_in_the_group(
 )
 def test_mention_parsing(body: str, expected: tuple[str, ...]) -> None:
     assert mentioned(body, {"enki", "nanna", "utu", "re-view-", "re-view"}, "enki") == expected
+
+
+def test_a_group_whose_last_member_leaves_is_gone_and_its_name_is_free(
+    cb: Callboard, tmp_path: Path
+) -> None:
+    note = tmp_path / "note.txt"
+    note.write_text("kept elsewhere\n")
+    assert cb("--as", "enki", "group", "create", "solo", "--members", "nanna").code == 0
+    assert cb("--as", "enki", "group", "send", "solo", "@nanna hi", "--attach", str(note)).code == 0
+    assert cb("--as", "enki", "group", "remove", "solo", "nanna").code == 0
+    assert cb("--as", "enki", "group", "remove", "solo", "enki") == (
+        0,
+        "removed enki from group:solo\ngroup:solo had no members left and is gone; its name is free\n",
+        "",
+    )
+    assert rows("SELECT count(*) FROM messages WHERE conversation_id = 'group:solo'") == [(0,)]
+    assert rows("SELECT count(*) FROM attachments") == [(0,)]
+    assert cb("--as", "utu", "group", "create", "solo", "--members", "niels") == (
+        0,
+        "created group:solo (members: niels, utu)\n",
+        "",
+    )
+
+
+def test_group_changes_print_json(cb: Callboard) -> None:
+    ok = {"schema_version": 1, "status": "ok", "warnings": []}
+    group = {"conversation": "group:ops", "handle": "utu"}
+    created = cb("--as", "enki", "group", "create", "ops", "--members", "nanna", "--json").json()
+    assert created == {
+        **ok,
+        "conversation": "group:ops",
+        "name": "ops",
+        "project": None,
+        "members": ["enki", "nanna"],
+    }
+    added = cb("--as", "enki", "group", "add", "ops", "utu", "--json").json()
+    assert added == {**ok, **group, "added": True}
+    again = cb("--as", "enki", "group", "add", "ops", "utu", "--json").json()
+    assert again == {**ok, **group, "added": False}
+    removed = cb("--as", "enki", "group", "remove", "ops", "utu", "--json").json()
+    assert removed == {**ok, **group, "group_deleted": False}

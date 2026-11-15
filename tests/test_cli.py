@@ -4,11 +4,14 @@ import os
 import re
 import subprocess
 import sys
+from importlib.metadata import PackageNotFoundError
 
 import pytest
 
 from callboard import __version__
+from callboard.bellhop_client import caller_for
 from callboard.cli import main, random_token, read_stdin, utc_now
+from callboard.models import Runtime
 
 
 def test_version_prints_the_package_version(capsys: pytest.CaptureFixture[str]) -> None:
@@ -130,3 +133,21 @@ def test_abbreviated_flags_are_refused(
 ) -> None:
     assert main(argv) == 2
     assert f"unrecognized arguments: {flag}" in capsys.readouterr().err
+
+
+def test_environment_values_stay_out_of_reprs() -> None:
+    env = {"SECRET_TOKEN": "s3cr3t-value"}
+    runtime = Runtime(env, lambda: "", lambda: "", lambda: "")
+    caller = caller_for(["bellhop"], env, 20.0)
+    assert "s3cr3t-value" not in repr(runtime) + repr(caller)
+
+
+def test_version_without_installed_metadata_is_unknown(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def missing(_name: str) -> str:
+        raise PackageNotFoundError(_name)
+
+    monkeypatch.setattr("callboard.cli.dispatch.version", missing)
+    assert main(["--version"]) == 0
+    assert capsys.readouterr().out == "callboard 0+unknown\n"

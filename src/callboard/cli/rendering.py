@@ -3,7 +3,7 @@ from pathlib import Path
 
 from callboard.models import Attachment, Conversation, InboxEntry, Message, Receipt
 from callboard.refs import ref_of
-from callboard.text import one_line
+from callboard.text import one_line, visible
 
 
 def attachment_json(item: Attachment, directory: Path) -> dict[str, object]:
@@ -37,7 +37,7 @@ def attachment_line(item: Attachment, directory: Path) -> str:
 
 def message_lines(item: Message, files: Sequence[Attachment], directory: Path) -> list[str]:
     reply = f" (reply to {item.parent_id})" if item.parent_id else ""
-    first, *rest = item.body.split("\n")
+    first, *rest = visible(item.body).split("\n")
     return [
         f"{item.id}  {item.created_at}  {item.sender}{reply}: {first}",
         *(f"  {line}" for line in rest),

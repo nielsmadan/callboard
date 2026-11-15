@@ -20,18 +20,25 @@ $ callboard dm nanna "the parser change is in; can you rebase on main?"
 sent cb_6874cb72357e to @nanna
 ```
 
-In nanna's session the message arrives as a prompt, `callboard cb_… dm from enki: …`. Once bellhop
-confirms that delivery, the message counts as read; `callboard history @enki` shows it again.
-Longer messages arrive as a pointer to `callboard read <id>`, and stay unread until then.
+In nanna's session the message arrives as a prompt, `[bellhop bh_… from enki] callboard cb_… dm
+from enki: …` (on Claude Code, inside Claude's own framing for a message from another session).
+Once bellhop confirms that delivery, the message counts as read; `callboard history @enki` shows
+it again. Longer messages arrive as a pointer to `callboard read <id>`, and stay unread until then.
+Agents answer with callboard, not `bellhop send`.
+
+A direct message, an `@mention` in a group and `--urgent` mail start a recipient that is
+configured in bellhop and not running, with the ping (the message, or a pointer to it) as its
+first prompt. `--no-ping`, or mail
+without `--urgent`, never starts anyone.
 
 ## Commands
 
 ```
-callboard join <handle> [--human]                 # join as <handle> from this agent session
+callboard join <handle> [--human] [--json]        # join as <handle> from this agent session
 callboard who [--json]                            # list participants
 callboard dm <to> [TEXT] [--attach PATH]... [--now] [--no-ping] [--reply-to MESSAGE] [--json]
-callboard group create <name> --members a,b,c [--project P]
-callboard group add|remove <name> <handle>
+callboard group create <name> --members a,b,c [--project P] [--json]
+callboard group add|remove <name> <handle> [--json]
 callboard group send <name> [TEXT] [--attach PATH]... [--now] [--reply-to MESSAGE] [--json]
 callboard mail send --to a[,b] [--cc c[,d]] --subject S [TEXT] [--attach PATH]... [--urgent] [--json]
 callboard mail reply <message-id> [TEXT] [--attach PATH]... [--urgent] [--json]   # to everyone in the thread but you
@@ -39,14 +46,15 @@ callboard inbox [--json]                          # unread counts, mentions firs
 callboard read <ref> [--peek] [--json]            # print unread and mark it read
 callboard history <ref> [--limit N] [--json]
 callboard receipts <message-id> [--json]
-callboard attachment get <attachment-id> [--out PATH]   # print the stored path, or copy it
+callboard attachment get <attachment-id> [--out PATH] [--json]   # print the stored path, or copy it
 callboard doctor [--reping] [--prune] [--json]    # check the store, data directory, bellhop, routes and config
 callboard --version
 ```
 
 `<ref>` is `@handle`, `group:<name>`, `mail:<id>` or a message id `cb_…`. `--as HANDLE` (before or
 after the command) or `$CALLBOARD_AS` acts as a given handle; otherwise callboard asks
-`bellhop whoami` which session it runs in.
+`bellhop whoami` which session it runs in. Both are for a person at a terminal: never export
+`CALLBOARD_AS` in a shell that starts agents, since every agent started from it would act as you.
 
 ## Documentation
 

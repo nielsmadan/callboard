@@ -1,5 +1,5 @@
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 type ParticipantKind = Literal["agent", "human"]
@@ -11,7 +11,7 @@ type PingState = Literal["pending", "sending", "sent", "confirmed", "read", "fai
 
 @dataclass(frozen=True)
 class Runtime:
-    env: Mapping[str, str]
+    env: Mapping[str, str] = field(repr=False)
     clock: Callable[[], str]
     token: Callable[[], str]
     stdin: Callable[[], str]
@@ -36,8 +36,6 @@ class JoinOutcome:
 @dataclass(frozen=True)
 class BellhopSession:
     session_id: str
-    harness: str
-    title: str | None
     agent: str | None
 
 
@@ -95,5 +93,4 @@ class BellhopMessage:
     id: str
     state: PingState
     urgency: str | None
-    degraded_from: str | None
     detail: str | None

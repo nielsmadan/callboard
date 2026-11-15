@@ -22,8 +22,8 @@ Paths in the output are printed in full; here your home directory is shown as `~
 $ callboard --version
 callboard 0.1.0
 $ callboard doctor
-warn  data_dir  ~/.local/share/callboard absent; created by the first callboard join
-warn  store     ~/.local/share/callboard/callboard.sqlite absent; created by the first callboard join
+warn  data_dir  ~/.local/share/callboard absent; created by the first callboard command
+warn  store     ~/.local/share/callboard/callboard.sqlite absent; created by the first callboard command
 ok    bellhop   ~/.local/bin/bellhop
 ok    routes    no agent routes to check
 ok    config    ~/.config/callboard/config.toml absent; using the defaults
@@ -46,13 +46,15 @@ $ callboard who
 ```
 
 `*` marks you. A session holds one handle: joining as a second handle from the same session moves
-the route to it, and joining an existing handle from another session moves that handle there.
-Both are reported on stderr.
+the session to it (whether the earlier handle was routed by bellhop agent name or by session id),
+and joining an existing handle from another session moves that handle there. Both are reported on
+stderr. A handle is up to 64 lowercase letters, digits, `_` and `-`, and `join` takes no `--as`.
 
 ## Humans
 
 A human joins without a session and has no route, so nothing rings them. They act with `--as`
-(before or after the command) or `$CALLBOARD_AS`:
+(before or after the command), or with `CALLBOARD_AS` set for one command
+(`CALLBOARD_AS=niels callboard inbox`):
 
 ```
 $ callboard join niels --human
@@ -61,9 +63,18 @@ $ callboard --as niels who
    handle  kind   route
    enki    agent  enki
 *  niels   human  -
+* is you through --as
 ```
 
-A message to a handle whose route is `-` is stored without a ping; that handle sees it only by
+Never `export CALLBOARD_AS` in a shell you start agents from: it takes precedence over the
+agent's own session, so the agent would send and read as you. `who` says when `*` comes from
+`--as` or `$CALLBOARD_AS`, and its `--json` has `you_from`.
+
+`join --human` cannot take an agent's handle while its route still resolves in bellhop (a live
+session, or a configured bellhop agent of that name), and an agent session cannot join a human's
+handle (both `handle_taken`). An agent handle whose route no longer resolves can be taken. A
+message to a
+handle whose route is `-` is stored without a ping; that handle sees it only by
 running `inbox`. Anyone on the machine can act as any handle this way. callboard does not authenticate senders.
 
 ## Teach your agents
@@ -76,12 +87,14 @@ skills folder, for example `~/.claude/skills/callboard` for Claude Code or
 ## Files and configuration
 
 - Store: `$XDG_DATA_HOME/callboard/callboard.sqlite` (default `~/.local/share/callboard`).
-- Attachments: `attachments/<sha256>` next to the store.
+- Attachments: `attachments/<sha256>` next to the store, read-only (mode 0400).
 - Config, optional: `$XDG_CONFIG_HOME/callboard/config.toml` (default `~/.config/callboard`).
 
 ```toml
 max_attachment_bytes = 52428800   # per file; default 50 MiB
 ping_command = ["bellhop"]        # argv for every bellhop call; default: bellhop on PATH
 ```
+
+Any other key is an error (`invalid_config`) that names it.
 
 Next: [chat](chat.md), [mail](mail.md), and the [JSON output](json.md).

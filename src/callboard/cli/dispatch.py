@@ -1,7 +1,7 @@
 import argparse
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
 from callboard.cli.chat import dm, group, mail
 from callboard.cli.commands import join, who
@@ -29,11 +29,18 @@ COMMANDS: Mapping[str, Command] = {
 }
 
 
+def installed_version() -> str:
+    try:
+        return version("callboard")
+    except PackageNotFoundError:
+        return "0+unknown"
+
+
 def run(argv: Sequence[str], runtime: Runtime) -> int:
     try:
         args = parse(argv)
         if args.version:
-            print(f"callboard {version('callboard')}")
+            print(f"callboard {installed_version()}")
             return 0
         if args.command is None:
             raise CallboardError("missing command; see callboard --help", code="usage")

@@ -9,6 +9,7 @@ type Code = Literal[
     "conversation_not_found",
     "doctor_failed",
     "group_exists",
+    "handle_taken",
     "hls_unavailable",
     "identity_ambiguous",
     "identity_not_found",
@@ -35,6 +36,7 @@ IDENTITY_AMBIGUOUS: Code = "identity_ambiguous"
 IDENTITY_NOT_FOUND: Code = "identity_not_found"
 CONVERSATION_NOT_FOUND: Code = "conversation_not_found"
 GROUP_EXISTS: Code = "group_exists"
+HANDLE_TAKEN: Code = "handle_taken"
 MESSAGE_NOT_FOUND: Code = "message_not_found"
 NOT_A_MEMBER: Code = "not_a_member"
 INTERNAL_ERROR: Code = "internal_error"
@@ -46,11 +48,9 @@ STORE_UNAVAILABLE: Code = "store_unavailable"
 UNKNOWN_HANDLE: Code = "unknown_handle"
 USAGE: Code = "usage"
 
-OK_EXIT = 0
 FAILURE_EXIT = 1
 USAGE_EXIT = 2
 NOT_FOUND_EXIT = 3
-NO_ROUTE_EXIT = 4
 HLS_UNAVAILABLE_EXIT = 5
 INTERRUPTED_EXIT = 130
 
@@ -66,6 +66,7 @@ EXIT_CODES: Mapping[Code, int] = MappingProxyType(
         IDENTITY_NOT_FOUND: NOT_FOUND_EXIT,
         CONVERSATION_NOT_FOUND: NOT_FOUND_EXIT,
         GROUP_EXISTS: FAILURE_EXIT,
+        HANDLE_TAKEN: FAILURE_EXIT,
         MESSAGE_NOT_FOUND: NOT_FOUND_EXIT,
         NOT_A_MEMBER: NOT_FOUND_EXIT,
         INTERNAL_ERROR: FAILURE_EXIT,

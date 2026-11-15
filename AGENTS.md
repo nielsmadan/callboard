@@ -46,7 +46,7 @@ Only SQL runs inside a write transaction: never a subprocess, a push or a file c
 - New code normally needs no comments or docstrings. Use names and small typed functions.
 - `--json` prints exactly one object on stdout. Diagnostics go to stderr prefixed `callboard: `.
 - Error messages in git style: lowercase, no trailing period, clauses joined with `;`.
-- Exit codes: 0 ok, 1 failure, 2 usage, 3 not found or ambiguous, 4 no usable route, 5 hls
-  unavailable, 130 interrupted.
+- Exit codes: 0 ok, 1 failure, 2 usage, 3 not found or ambiguous, 4 no usable route (reserved;
+  never returned), 5 hls unavailable, 130 interrupted.
 
 Never run `just release`, tag, publish, or install a global command unless the user asks.

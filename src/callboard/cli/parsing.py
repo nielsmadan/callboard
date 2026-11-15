@@ -14,6 +14,7 @@ class _Parser(argparse.ArgumentParser):
 
 
 AS_HELP = "act as this handle"
+DASH_HINT = "; a TEXT that starts with '-' goes after --, as in: callboard dm nanna -- -x"
 
 
 def _as_flag() -> "_Parser":
@@ -29,11 +30,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="store_true", help="print the version and exit")
     parser.add_argument("--as", dest="as_handle", metavar="HANDLE", help=AS_HELP)
     commands = parser.add_subparsers(dest="command", metavar="COMMAND", parser_class=_Parser)
-    join = commands.add_parser(
-        "join", parents=[_as_flag()], help="join callboard as a handle from this session"
-    )
+    join = commands.add_parser("join", help="join callboard as a handle from this session")
     join.add_argument("handle")
     join.add_argument("--human", action="store_true", help="join as a human, with no route")
+    join.add_argument("--json", action="store_true", help="print one JSON object")
     who = commands.add_parser("who", parents=[_as_flag()], help="list participants")
     who.add_argument("--json", action="store_true", help="print one JSON object")
     doctor = commands.add_parser(
@@ -86,10 +86,12 @@ def _add_chat(commands: "argparse._SubParsersAction[_Parser]") -> None:
     create.add_argument("name")
     create.add_argument("--members", type=_handles, action="extend", required=True, metavar="A,B,C")
     create.add_argument("--project", metavar="P")
+    create.add_argument("--json", action="store_true", help="print one JSON object")
     for action, verb in (("add", "add a member"), ("remove", "remove a member")):
         change = actions.add_parser(action, parents=[_as_flag()], help=verb)
         change.add_argument("name")
         change.add_argument("handle")
+        change.add_argument("--json", action="store_true", help="print one JSON object")
     send = actions.add_parser(
         "send", parents=[_as_flag()], help="post to a group; @handle rings a member"
     )
@@ -156,10 +158,49 @@ def _add_reading(commands: "argparse._SubParsersAction[_Parser]") -> None:
     get = files.add_parser("get", parents=[_as_flag()], help="print the stored path or copy it")
     get.add_argument("attachment_id", metavar="ATTACHMENT")
     get.add_argument("--out", metavar="PATH", help="copy the file here instead")
+    get.add_argument("--json", action="store_true", help="print one JSON object")
+
+
+def _utf8(argument: str) -> bool:
+    try:
+        argument.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+TEXT_COMMANDS = (("dm",), ("group", "send"), ("mail", "send"), ("mail", "reply"))
+
+
+def _words(argv: Sequence[str]) -> list[str]:
+    words: list[str] = []
+    skip = False
+    for argument in argv:
+        if skip:
+            skip = False
+        elif argument == "--as":
+            skip = True
+        elif not argument.startswith("-"):
+            words.append(argument)
+    return words
+
+
+def _dash_text(argv: Sequence[str], message: str) -> bool:
+    unknown = message.removeprefix("unrecognized arguments: ")
+    single = unknown != message and unknown.startswith("-") and not unknown.startswith("--")
+    words = _words(argv)
+    return single and any(tuple(words[: len(command)]) == command for command in TEXT_COMMANDS)
 
 
 def parse(argv: Sequence[str]) -> argparse.Namespace:
-    return build_parser().parse_args(argv)
+    if not all(_utf8(argument) for argument in argv):
+        raise CallboardError("an argument is not valid UTF-8 text", code="usage")
+    try:
+        return build_parser().parse_args(argv)
+    except CallboardError as error:
+        if error.code != "usage" or not _dash_text(argv, str(error)):
+            raise
+        raise CallboardError(f"{error}{DASH_HINT}", code="usage") from error
 
 
 def json_requested(argv: Sequence[str]) -> bool:

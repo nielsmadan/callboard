@@ -3,6 +3,7 @@
   "status": "ok",
   "warnings": [],
   "you": "enki",
+  "you_from": "session",
   "participants": [
     {"handle": "enki", "kind": "agent", "route": "enki", "created_at": "2026-11-14T09:00:00Z"},
     {"handle": "niels", "kind": "human", "route": null, "created_at": "2026-11-14T09:00:00Z"}

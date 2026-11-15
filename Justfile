@@ -1,4 +1,4 @@
-bellhop_commit := "f551bdf55a60301e33e745a871498aaf8a3c68ce"
+bellhop_commit := "14de6c2e38c2e132fa19b50a31d7abf4315edf63"
 bellhop_repo := env("BELLHOP_REPO", justfile_directory() / "../../bellhop/dev1")
 
 [private]

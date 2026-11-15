@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from callboard.errors import CallboardError
 
 MESSAGE_ID = re.compile(r"cb_[0-9a-f]{12}")
-NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
+NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
 
 
 @dataclass(frozen=True)

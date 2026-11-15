@@ -108,7 +108,7 @@ def add_member(conn: sqlite3.Connection, name: str, caller: str, handle: str, no
     return cursor.rowcount == 1
 
 
-def remove_member(conn: sqlite3.Connection, name: str, caller: str, handle: str) -> None:
+def remove_member(conn: sqlite3.Connection, name: str, caller: str, handle: str) -> bool:
     conversation_id = f"group:{name}"
     with write(conn):
         require_member(conn, conversation_id, caller)
@@ -120,3 +120,30 @@ def remove_member(conn: sqlite3.Connection, name: str, caller: str, handle: str)
             raise CallboardError(
                 f"'{handle}' is not a member of {conversation_id}", code="not_a_member"
             )
+        emptied = not members(conn, conversation_id)
+        if emptied:
+            _drop(conn, conversation_id)
+    return emptied
+
+
+DROP_CONVERSATION = (
+    (
+        "DELETE FROM mentions WHERE message_id IN"
+        " (SELECT id FROM messages WHERE conversation_id = ?)"
+    ),
+    (
+        "DELETE FROM receipts WHERE message_id IN"
+        " (SELECT id FROM messages WHERE conversation_id = ?)"
+    ),
+    (
+        "DELETE FROM attachments WHERE message_id IN"
+        " (SELECT id FROM messages WHERE conversation_id = ?)"
+    ),
+    "DELETE FROM messages WHERE conversation_id = ?",
+    "DELETE FROM conversations WHERE id = ?",
+)
+
+
+def _drop(conn: sqlite3.Connection, conversation_id: str) -> None:
+    for statement in DROP_CONVERSATION:
+        conn.execute(statement, (conversation_id,))

@@ -103,9 +103,9 @@ def test_a_wake_is_pending_until_the_start_or_carries_why_it_waits_or_failed() -
 
 def test_whoami_results_parse_or_map_to_their_error() -> None:
     session = parse_whoami(require_ok(Reply(0, _load("whoami.json")), "whoami"))
-    assert (session.agent, session.harness, session.title) == ("enki", "claude", "alpha")
+    assert (session.agent, session.session_id) == ("enki", "2e2042a9-937c-4e03-ba25-74b5ba14a58f")
     unnamed = parse_whoami(require_ok(Reply(0, _load("whoami-no-agent.json")), "whoami"))
-    assert (unnamed.agent, unnamed.harness) == (None, "codex")
+    assert (unnamed.agent, unnamed.session_id) == (None, "2e20ffff-0000-4000-8000-000000000002")
     with pytest.raises(CallboardError) as caught:
         require_ok(Reply(3, _load("whoami-caller-unknown.json")), "whoami")
     assert caught.value.code == "not_in_session"
@@ -138,8 +138,8 @@ def test_degraded_and_held_sends_are_told_apart_by_urgency() -> None:
     held = parse_message(_load("send-held.json")["message"])
     assert degraded is not None
     assert held is not None
-    assert (degraded.urgency, degraded.degraded_from, degraded.state) == ("now", "now", "sent")
-    assert (held.urgency, held.degraded_from, held.state) == ("hold", "idle", "pending")
+    assert (degraded.urgency, degraded.state) == ("now", "sent")
+    assert (held.urgency, held.state) == ("hold", "pending")
 
 
 @pytest.mark.parametrize(

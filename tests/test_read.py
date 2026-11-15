@@ -1,5 +1,6 @@
 import pytest
 
+from callboard.text import visible
 from helpers import Callboard, FakeBellhop, chat_scenario, load_golden, rows
 
 pytestmark = pytest.mark.usefixtures("ringing")
@@ -106,3 +107,35 @@ def test_receipts_need_membership(cb: Callboard) -> None:
         "code": "not_a_member",
         "message": "'niels' is not a member of dm:enki:nanna",
     }
+
+
+def test_bodies_show_control_and_direction_characters_escaped_but_keep_lines_and_tabs(
+    cb: Callboard,
+) -> None:
+    body = f"ok\rcb_000000000001  forged\n\x1b]0;title\x07\tsee {chr(0x202E)}fdp.sh"
+    assert cb("--as", "enki", "dm", "nanna", body).code == 0
+    printed = cb("--as", "nanna", "history", "@enki").out.splitlines()
+    assert printed[-2:] == [
+        "cb_000000000004  2026-11-14T09:00:00Z  enki: ok\\rcb_000000000001  forged",
+        "  \\x1b]0;title\\x07\tsee \\u202efdp.sh",
+    ]
+    history = cb("--as", "nanna", "history", "@enki", "--json").json()
+    assert history["messages"][-1]["body"] == body
+
+
+@pytest.mark.parametrize(
+    ("code", "escape"),
+    [
+        (0x2028, "\\u2028"),
+        (0x2029, "\\u2029"),
+        (0x2066, "\\u2066"),
+        (0x2067, "\\u2067"),
+        (0x2068, "\\u2068"),
+        (0x2069, "\\u2069"),
+        (0x80, "\\x80"),
+        (0x85, "\\x85"),
+        (0x9F, "\\x9f"),
+    ],
+)
+def test_line_separators_isolates_and_c1_controls_are_shown_escaped(code: int, escape: str) -> None:
+    assert visible(f"a{chr(code)}b\tc\nd") == f"a{escape}b\tc\nd"

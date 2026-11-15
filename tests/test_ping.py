@@ -14,7 +14,7 @@ import pytest
 from callboard.messages import send_direct
 from callboard.models import BellhopMessage
 from callboard.paths import store_path
-from callboard.ping import Ring, Rung, record
+from callboard.ping import Ring, Rung, record, send_worst
 from callboard.store import open_store
 from helpers import FAKES, Callboard, FakeBellhop, rows, seed
 
@@ -76,6 +76,17 @@ def test_a_direct_message_rings_at_idle_with_wake_and_the_full_text(
         }
     ]
     assert _receipt("cb_000000000001", "nanna") == ("bh_000000000001", "pending", None, 1)
+
+
+def test_an_inline_ping_shows_control_characters_escaped_and_stores_the_body_as_sent(
+    cb: Callboard, bellhop: FakeBellhop
+) -> None:
+    body = "red \x1b[31mtext\x07\tnext\nline\x00end"
+    assert cb("--as", "enki", "dm", "nanna", body).code == 0
+    assert bellhop.entries()[0]["stdin"] == (
+        "callboard cb_000000000001 dm from enki: red \\x1b[31mtext\\x07\tnext\nline\\x00end"
+    )
+    assert rows("SELECT body FROM messages") == [(body,)]
 
 
 def test_now_rings_as_an_interrupt(cb: Callboard, bellhop: FakeBellhop) -> None:
@@ -345,8 +356,11 @@ def test_held_or_old_or_unrung_receipts_are_not_refreshed(
                 ),
                 "exit_code": 2,
             },
-            "failed",
-            "bellhop send: body longer than 8000 characters",
+            "pending",
+            (
+                "bellhop send: body longer than 8000 characters; callboard and bellhop may not"
+                " match; callboard doctor --reping rings it again once they do"
+            ),
         ),
         (
             {
@@ -373,7 +387,14 @@ def test_held_or_old_or_unrung_receipts_are_not_refreshed(
             "pending",
             "bellhop send returned no message",
         ),
-        ({"sleep": 3}, "pending", "bellhop send timed out after 0.5s"),
+        (
+            {"sleep": 3},
+            "pending",
+            (
+                "bellhop send timed out after 0.5s; the outcome is unknown;"
+                " callboard doctor --reping settles it"
+            ),
+        ),
     ],
 )
 def test_a_failing_bellhop_never_loses_the_message(
@@ -453,6 +474,21 @@ def test_a_confirm_bellhop_could_not_do_is_passed_on_not_failed(
         ],
     )
     assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", "sent")
+
+
+def test_any_other_bellhop_send_warning_is_passed_on(cb: Callboard, bellhop: FakeBellhop) -> None:
+    bellhop.replay("send", "send-not-running.json")
+    result = cb("--as", "enki", "dm", "nanna", "later", "--json")
+    assert (result.code, result.json()["warnings"]) == (
+        0,
+        [
+            (
+                "ping nanna for cb_000000000001: bellhop send:"
+                " 'nanna' is not running; the message waits (use --wake to start it)"
+            )
+        ],
+    )
+    assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", "pending")
 
 
 def test_unknown_ids_from_a_refresh_are_passed_on(cb: Callboard, bellhop: FakeBellhop) -> None:
@@ -550,15 +586,33 @@ def test_a_failed_refresh_is_a_warning(
     assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", "pending")
 
 
-def test_one_deadline_covers_identity_and_ringing(cb: Callboard, bellhop: FakeBellhop) -> None:
+def _confirm_of(bellhop: FakeBellhop) -> float:
+    send = next(call for call in bellhop.calls() if call[0] == "send")
+    return float(send[send.index("--confirm") + 1])
+
+
+def test_a_send_that_starts_late_still_gets_its_whole_budget(
+    cb: Callboard, bellhop: FakeBellhop
+) -> None:
     bellhop.replay("whoami", "whoami.json")
     bellhop.behave(sleep=1.2)
     started = time.monotonic()
     result = cb("dm", "nanna", "hello", "--json", deadline=2.0)
     elapsed = time.monotonic() - started
-    assert result.code == 0
-    assert result.json()["warnings"][0].startswith("ping nanna for cb_000000000001: bellhop send")
+    assert (result.code, result.json()["warnings"]) == (0, [])
+    assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", "pending")
+    assert _confirm_of(bellhop) == 0
     assert elapsed < 3.2
+
+
+def test_confirm_waits_only_for_the_time_left_after_bellhops_budget(
+    cb: Callboard, bellhop: FakeBellhop
+) -> None:
+    bellhop.replay("whoami", "whoami.json")
+    bellhop.behave(sleep=1.2)
+    result = cb("dm", "nanna", "hello", "--json", deadline=12.0)
+    assert (result.code, result.json()["warnings"]) == (0, [])
+    assert 0 < _confirm_of(bellhop) <= 12.0 - 10.0 - 1.2
 
 
 def test_rings_queued_behind_the_parallel_cap_share_the_deadline(
@@ -568,7 +622,7 @@ def test_rings_queued_behind_the_parallel_cap_share_the_deadline(
     assert cb("--as", "enki", "group", "create", "ops", "--members", "nanna,utu,niels").code == 0
     seed(("anu", "anu"))
     assert cb("--as", "enki", "group", "add", "ops", "anu").code == 0
-    bellhop.behave(sleep=0.8)
+    bellhop.behave(sleep=1.1)
     started = time.monotonic()
     result = cb("--as", "enki", "group", "send", "ops", "@nanna @utu @anu", "--json", deadline=2.0)
     elapsed = time.monotonic() - started
@@ -672,8 +726,8 @@ def test_a_timeout_kills_the_whole_bellhop_process_group(cb: Callboard, tmp_path
     config.parent.mkdir(parents=True)
     config.write_text(f'ping_command = ["{wrapper}"]\n')
     started = time.monotonic()
-    result = cb("--as", "enki", "dm", "nanna", "hello", deadline=0.5)
-    assert (result.code, time.monotonic() - started < 5) == (0, True)
+    result = cb("--as", "enki", "dm", "nanna", "hello", deadline=3)
+    assert (result.code, time.monotonic() - started < 10) == (0, True)
     grandchild = int(pidfile.read_text())
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline and _alive(grandchild):
@@ -706,7 +760,7 @@ def test_a_late_answer_never_moves_a_receipt_backwards(cb: Callboard, bellhop: F
     bellhop.replay("send", "send-confirmed.json")
     assert cb("--as", "enki", "dm", "nanna", "hello").code == 0
     ring = Ring("cb_000000000001", "nanna", SESSION, "idle", "enki", "text")
-    late = Rung(ring, BellhopMessage("bh_000000000001", "sending", "idle", None, None), False, ())
+    late = Rung(ring, BellhopMessage("bh_000000000001", "sending", "idle", None), False, ())
     with closing(open_store(store_path(os.environ))) as conn:
         record(conn, [late], "2026-11-14T09:05:00Z")
     assert _receipt("cb_000000000001", "nanna") == (
@@ -715,6 +769,34 @@ def test_a_late_answer_never_moves_a_receipt_backwards(cb: Callboard, bellhop: F
         "2026-11-14T09:00:00Z",
         1,
     )
+
+
+@pytest.mark.parametrize(
+    ("fixture", "state"), [("send-confirmed.json", "confirmed"), ("send-read.json", "read")]
+)
+def test_a_late_refusal_never_turns_a_delivered_receipt_failed(
+    cb: Callboard, bellhop: FakeBellhop, fixture: str, state: str
+) -> None:
+    bellhop.replay("send", fixture)
+    assert cb("--as", "enki", "dm", "nanna", "hello").code == 0
+    ring = Ring("cb_000000000001", "nanna", SESSION, "idle", "enki", "text")
+    with closing(open_store(store_path(os.environ))) as conn:
+        record(conn, [Rung(ring, None, True, ())], "2026-11-14T09:05:00Z")
+    assert _receipt("cb_000000000001", "nanna")[:3] == (
+        "bh_000000000001",
+        state,
+        "2026-11-14T09:00:00Z",
+    )
+
+
+def test_a_stale_refresh_never_moves_a_sent_receipt_back_to_pending(
+    cb: Callboard, bellhop: FakeBellhop
+) -> None:
+    bellhop.replay("send", "send-sent.json")
+    assert cb("--as", "enki", "dm", "nanna", "hello").code == 0
+    bellhop.replay("status", "status-pending.json")
+    assert cb("--as", "enki", "receipts", "cb_000000000001", "--json").code == 0
+    assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", "sent")
 
 
 def test_ctrl_c_while_ringing_stops_promptly(bellhop: FakeBellhop) -> None:
@@ -748,7 +830,10 @@ def test_a_kill_refused_for_an_exited_child_still_reports_the_timeout(
     bellhop.behave(sleep=1)
     result = cb("--as", "enki", "dm", "nanna", "hello", "--json", deadline=0.3)
     assert result.json()["warnings"] == [
-        "ping nanna for cb_000000000001: bellhop send timed out after 0.3s"
+        (
+            "ping nanna for cb_000000000001: bellhop send timed out after 0.3s;"
+            " the outcome is unknown; callboard doctor --reping settles it"
+        )
     ]
 
 
@@ -801,7 +886,7 @@ def test_ctrl_c_after_storing_still_reports_the_message(
         ("send-no-route.json", "failed"),
         ("send-target-not-found.json", "failed"),
         ("send-target-ambiguous.json", "failed"),
-        ("send-usage.json", "failed"),
+        ("send-usage.json", "pending"),
         ("send-hls-unavailable.json", "pending"),
     ],
 )
@@ -932,3 +1017,55 @@ def test_a_wake_after_a_failed_start_records_the_ping_failed_with_its_detail(
     )
     assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", "failed")
     assert cb("doctor", "--reping", "--json").json().get("repinged") == 0
+
+
+@pytest.mark.parametrize(
+    ("level", "confirm", "worst"),
+    [("idle", 0.0, 20.0), ("now", 5.0, 20.0), ("hold", 5.0, 15.0), ("hold", 0.0, 10.0)],
+)
+def test_a_ring_that_may_start_its_agent_is_given_bellhops_tmux_time(
+    level: str, confirm: float, worst: float
+) -> None:
+    ring = Ring("cb_000000000001", "nanna", SESSION, level, "enki", "text")
+    assert send_worst(ring, confirm) == worst
+
+
+def test_bellhop_text_in_a_warning_is_escaped_and_cut(cb: Callboard, bellhop: FakeBellhop) -> None:
+    message = "x\x1b[2J" + "y" * 1000
+    envelope = {
+        "schema_version": 1,
+        "status": "error",
+        "exit_code": 1,
+        "error": {"code": "store_error", "message": message},
+    }
+    bellhop.behave(raw=json.dumps(envelope), exit_code=1)
+    warning = cb("--as", "enki", "dm", "nanna", "hello", "--json").json()["warnings"][0]
+    shown = "x\\x1b[2J" + "y" * 1000
+    assert warning == f"ping nanna for cb_000000000001: bellhop send: {shown[:299]}…"
+
+
+@pytest.mark.parametrize(
+    ("message", "warnings", "raw"),
+    [
+        (
+            {"id": "bh_1", "state": "failed", "detail": "z\x07" + "q" * 1000},
+            [],
+            "z\x07" + "q" * 1000,
+        ),
+        ({"id": "bh_1", "state": "sent"}, ["w\x1b" + "r" * 1000], "w\x1b" + "r" * 1000),
+    ],
+)
+def test_a_detail_or_warning_from_bellhop_is_escaped_and_cut(
+    cb: Callboard,
+    bellhop: FakeBellhop,
+    message: dict[str, object],
+    warnings: list[str],
+    raw: str,
+) -> None:
+    envelope = {"schema_version": 1, "status": "ok", "warnings": warnings, "message": message}
+    bellhop.behave(raw=json.dumps(envelope))
+    shown = raw.replace("\x07", "\\x07").replace("\x1b", "\\x1b")
+    result = cb("--as", "enki", "dm", "nanna", "hello", "--json")
+    assert result.json()["warnings"] == [
+        f"ping nanna for cb_000000000001: bellhop send: {shown[:299]}…"
+    ]

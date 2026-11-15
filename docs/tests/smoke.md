@@ -11,6 +11,9 @@ of that environment: callboard from this checkout's `src`, bellhop installed fro
 
 ## Set-up
 
+- Machine-specific: the test runs Claude and Pi through `~/ac/bin/sops-exec` (which injects their
+  API keys) and installs hooklinesinker from `~/.local/share/hooklinesinker/bin/hooklinesinker`,
+  both hard-coded in `smoke_run()`. On a machine without them, change those two paths first.
 - `bellhop.testing.run.SmokeRun` on `tmux -L callboard-smoke`, one isolated home per run under
   `.cache/smoke/<run>/`: `HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `PI_CODING_AGENT_DIR`, all
   four `XDG_*` and `TMPDIR` resolve inside it. bellhop's runtime directory is `/tmp/bellhop-smoke-<run>`, outside
@@ -59,28 +62,50 @@ of that environment: callboard from this checkout's `src`, bellhop installed fro
 
 ## Runs
 
-2026-11-14, bellhop `843e3b6`, Claude Code 2.1.325, Pi 1.5.2, hooklinesinker 1.5.1, tmux 3.8,
-macOS 27.2.
+2026-11-14, a pre-release bellhop that could not yet launch agents, Claude Code 2.1.325, Pi 1.5.2,
+hooklinesinker 1.5.1, tmux 3.8, macOS 27.2.
 
 | Run | Result | Notes |
 |---|---|---|
 | `20261114-153906-d4c2` | 3 of 5 | the reply and group cells failed on two test bugs, fixed: the reply's receipt was asked for as `driver`, who is not in the `cl`–`pi` dm, and `group create` was given `--json`, which it does not take. The reply itself was delivered and read |
 | `20261114-154423-da19` | 5 of 5, 34 s | every ping reached its transcript once. Pi answered the `pong` by sending one back to `cl`; the first prompt now tells agents not to send unasked |
 | `20261114-155729-55d9` | 5 of 5, 35 s | the committed test, after review fixes (logs written on failure, inbox checked before the nudge, `python -m pytest` in the recipe). Every ping reached its transcript once; no agent sent anything unasked |
-| `20261114-161015-b7ad` | 5 of 5, 37 s | after the K-9f fixes: exact allow-list entries, the drainer stopped only through its own lock, leftover checks that also fail a failed run. No problems recorded |
+| `20261114-161015-b7ad` | 5 of 5, 37 s | after review fixes: exact allow-list entries, the drainer stopped only through its own lock, leftover checks that also fail a failed run. No problems recorded |
 
-2026-11-14, bellhop `53618c7` (the launcher), Claude Code 2.1.325, Pi 1.5.2, hooklinesinker 1.5.1,
-tmux 3.8, macOS 27.2. Each `just smoke` is two runs, one per test.
+2026-11-14, a pre-release bellhop with the launcher, Claude Code 2.1.325, Pi 1.5.2, hooklinesinker
+1.5.1, tmux 3.8, macOS 27.2. Each `just smoke` is two runs, one per test.
 
 | Run | Result | Notes |
 |---|---|---|
 | `20261114-190045-6059` + `20261114-190125-b08d` | 5 of 5 and the launch cell, 63 s | the allow-list now comes from the helper's `settings.json`, and its teardown stops the drainer. The wake started `scribe` on `tmux -L callboard-smoke`, live a second after the send; the new session's transcript holds the mail's envelope once and Claude answered `ACK`. The receipt settled at `sent`, unread, and the send passed on bellhop's warning `--confirm does not wait for a message that starts its agent`. No problems recorded |
 | `20261114-190953-087c` + `20261114-191052-7aa6` | 5 of 5 and the launch cell, 101 s | the committed test, after review fixes (the default tmux server is compared in the closing checks on every path, a woken session is adopted before any assert). The woken `scribe` was live 5 s after the send and answered `ACK`; every envelope reached its transcript once; the receipt settled at `sent`, unread, with the same `--confirm` warning. A bellhop smoke ran on `tmux -L bellhop-smoke` at the same time. No problems recorded |
-| `20261114-192212-cbf5` + `20261114-192257-d075` | 5 of 5 and the launch cell, 69 s | after K-10f: the wake's `--confirm does not wait …` warning is routine (the send's `warnings` is empty), the default-server check looks only for this run's agent names, and the woken session's own transcript (`e70abdf4-…`) holds the envelope once and Claude's `ACK`. The wake was `sent` 1 s after it was stored; the receipt settled at `sent`, unread. No problems recorded |
+| `20261114-192212-cbf5` + `20261114-192257-d075` | 5 of 5 and the launch cell, 69 s | after the wake checks were tightened: the wake's `--confirm does not wait …` warning is routine (the send's `warnings` is empty), the default-server check looks only for this run's agent names, and the woken session's own transcript (`e70abdf4-…`) holds the envelope once and Claude's `ACK`. The wake was `sent` 1 s after it was stored; the receipt settled at `sent`, unread. No problems recorded |
 
-2026-11-14, bellhop `f551bdf` (a start's first message is confirmed), Claude Code 2.1.325,
+2026-11-14, a pre-release bellhop that confirms a start's first message, Claude Code 2.1.325,
 Pi 1.5.2, hooklinesinker 1.5.1, tmux 3.8, macOS 27.2.
 
 | Run | Result | Notes |
 |---|---|---|
 | `20261114-201847-57c9` + `20261114-201934-e5eb` | 5 of 5 and the launch cell, 76 s | the woken mail (`bh_cce1a1dd22bf`) was stored at 20:19:56, `sent` at :57 and `confirmed` at :58 from the new session's transcript; the receipt reached `confirmed` with `read_at` set, so it counts as read. Every envelope reached its transcript once; Claude answered `ACK`; the send had no warnings. A bellhop smoke ran on `tmux -L bellhop-smoke` at the same time. No problems recorded |
+| `20261114-211535-3b03` + `20261114-211629-aa94` | 5 of 5 and the launch cell, 85 s | after the hardening fixes (deadlines from bellhop's worst case, `--confirm` from the time left, escaped ping text, read-only blobs): every envelope reached its transcript once; the woken mail `bh_fa609c676497` was `sent` 1 s after it was stored and `confirmed` 1 s later, read; no warnings. No problems recorded |
+
+2026-11-14, a pre-release bellhop that refuses control characters in a body, Claude Code 2.1.325,
+Pi 1.5.2, hooklinesinker 1.5.1, tmux 3.8, macOS 27.2.
+
+| Run | Result | Notes |
+|---|---|---|
+| `20261114-225336-2a31` + `20261114-225437-ec8d` | 5 of 5 and the launch cell, 96 s | `drainer_running` now comes from `bellhop.testing`. Every envelope reached its transcript once (Claude transcripts now also hold an `api-request-blob` copy of each request; only `user` records are counted). The woken mail `bh_63550f64747e` was stored at 22:55:06, `sent` and `confirmed` at :08 from the new session's transcript; the receipt reached `confirmed` with `read_at` set and the send had no warnings. A bellhop smoke ran on `tmux -L bellhop-smoke` at the same time. No problems recorded |
+
+2026-11-15, bellhop as released but for a test-only fix, Claude Code 2.1.325, Pi 1.5.2,
+hooklinesinker 1.5.1, tmux 3.8, macOS 27.2.
+
+| Run | Result | Notes |
+|---|---|---|
+| `20261114-233714-2503` + `20261114-233826-1f21` | 5 of 5 and the launch cell, 116 s | every envelope reached its transcript once; the woken mail `bh_37da3b43f70d` was stored at 23:39:02, `sent` and `confirmed` at :04 from the new session's transcript; the receipt reached `confirmed` with `read_at` set and the send had no warnings. No problems recorded |
+
+2026-11-15, bellhop `14de6c2`, Claude Code 2.1.325, Pi 1.5.2, hooklinesinker 1.5.1, tmux 3.8,
+macOS 27.2.
+
+| Run | Result | Notes |
+|---|---|---|
+| `20261115-001200-d0bb` + `20261115-001328-2574` | 5 of 5 and the launch cell, 133 s | every envelope reached its transcript once; the woken mail `bh_d5d7166dc3f5` was stored at 00:14:04, `sent` at :06 and `confirmed` at :07 from the new session's transcript; the receipt reached `confirmed` with `read_at` set and the send had no warnings. No problems recorded |

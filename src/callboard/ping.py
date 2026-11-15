@@ -1,13 +1,18 @@
 import json
+import math
 import sqlite3
 import threading
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal
 
 from callboard.bellhop_client import (
+    COMMAND_SECONDS,
+    TEXT_LIMIT,
+    BellhopTimeout,
     Caller,
     Reply,
     call,
@@ -20,19 +25,24 @@ from callboard.bellhop_client import (
 from callboard.errors import CallboardError
 from callboard.models import BellhopMessage, PingState
 from callboard.store import write
-from callboard.text import shortened
+from callboard.text import shortened, visible
 
 MAX_PARALLEL = 8
-CONFIRM_SECONDS = 5
+CONFIRM_SECONDS = 5.0
+WAKE_SECONDS = 10.0
 REFRESH_WINDOW = timedelta(minutes=15)
 ROUTINE_WARNINGS = (
     "not confirmed within ",
     "--confirm does not wait for a message that starts its agent",
 )
-REFUSED_CODES = frozenset({"usage", "target_not_found", "target_ambiguous", "no_route"})
+REFUSED_CODES = frozenset({"target_not_found", "target_ambiguous", "no_route"})
 READ_STATES = frozenset({"confirmed", "read"})
 SUBJECT_LIMIT = 80
-STATE_ORDER = "|pending|sending|sent|confirmed|read|failed|"
+MISMATCH = (
+    "callboard and bellhop may not match; callboard doctor --reping rings it again once they do"
+)
+OUTCOME_UNKNOWN = "the outcome is unknown; callboard doctor --reping settles it"
+STATE_ORDER = "|pending|sending|sent|failed|confirmed|read|"
 
 
 @dataclass(frozen=True)
@@ -70,7 +80,7 @@ def ping_text(
     message_id: str, sender: str, where: str, body: str, attachments: int, *, inline: bool
 ) -> str:
     if inline:
-        return f"callboard {message_id} {where} from {sender}: {body}"
+        return f"callboard {message_id} {where} from {sender}: {visible(body)}"
     size = _count(len(body), "char")
     files = f", {_count(attachments, 'attachment')}" if attachments else ""
     return (
@@ -79,8 +89,20 @@ def ping_text(
     )
 
 
-def send_arguments(ring: Ring) -> list[str]:
-    wake = ["--wake"] if ring.level in {"idle", "now"} else []
+def wakes(ring: Ring) -> bool:
+    return ring.level in {"idle", "now"}
+
+
+def confirm_seconds(remaining: float) -> float:
+    return min(CONFIRM_SECONDS, max(0.0, math.floor((remaining - COMMAND_SECONDS) * 10) / 10))
+
+
+def send_worst(ring: Ring, confirm: float) -> float:
+    return COMMAND_SECONDS + max(confirm, WAKE_SECONDS if wakes(ring) else 0.0)
+
+
+def send_arguments(ring: Ring, confirm: float = CONFIRM_SECONDS) -> list[str]:
+    wake = ["--wake"] if wakes(ring) else []
     return [
         "send",
         ring.route,
@@ -93,7 +115,7 @@ def send_arguments(ring: Ring) -> list[str]:
         "--key",
         f"{ring.message_id}:{ring.recipient}",
         "--confirm",
-        str(CONFIRM_SECONDS),
+        f"{confirm:g}",
         "--json",
     ]
 
@@ -154,7 +176,7 @@ def _from_reply(ring: Ring, reply: Reply) -> Rung:
             else ()
         )
         failed = (
-            (f"{who}: bellhop send: {stored.detail or 'failed'}",)
+            (f"{who}: bellhop send: {shortened(stored.detail or 'failed', TEXT_LIMIT)}",)
             if stored.state == "failed"
             else ()
         )
@@ -162,14 +184,33 @@ def _from_reply(ring: Ring, reply: Reply) -> Rung:
     reason = (f"{who}: bellhop send: {error_message(reply.payload)}", *passed_on)
     if stored is not None:
         return Rung(ring, stored, stored.state == "failed", reason)
+    if error_code(reply.payload) == "usage":
+        mismatch = f"{who}: bellhop send: {error_message(reply.payload)}; {MISMATCH}"
+        return Rung(ring, None, False, (mismatch, *passed_on))
     return Rung(ring, None, error_code(reply.payload) in REFUSED_CODES, reason)
 
 
-def ring_one(ring: Ring, caller: Caller, cancel: threading.Event | None = None) -> Rung:
+def ring_one(
+    ring: Ring,
+    caller: Caller,
+    cancel: threading.Event | None = None,
+    now: Callable[[], float] = time.monotonic,
+) -> Rung:
+    who = f"ping {ring.recipient} for {ring.message_id}"
+    confirm = confirm_seconds(caller.deadline - now())
     try:
-        reply = call(caller, send_arguments(ring), stdin=ring.text, cancel=cancel)
+        reply = call(
+            caller,
+            send_arguments(ring, confirm),
+            stdin=ring.text,
+            now=now,
+            cancel=cancel,
+            worst=send_worst(ring, confirm),
+        )
+    except BellhopTimeout as error:
+        return Rung(ring, None, False, (f"{who}: {error}; {OUTCOME_UNKNOWN}",))
     except CallboardError as error:
-        return Rung(ring, None, False, (f"ping {ring.recipient} for {ring.message_id}: {error}",))
+        return Rung(ring, None, False, (f"{who}: {error}",))
     return _from_reply(ring, reply)
 
 
@@ -263,11 +304,17 @@ def refresh(
         return [f"refreshing receipts: {error}"]
     with write(conn):
         conn.executemany(
-            "UPDATE receipts SET ping_state = ?,"
-            " read_at = CASE WHEN inline = 1 AND read_at IS NULL THEN ? ELSE read_at END"
-            " WHERE bellhop_id = ? AND ping_state IN ('pending', 'sending', 'sent')",
+            "UPDATE receipts SET ping_state = :state,"
+            " read_at = CASE WHEN inline = 1 AND read_at IS NULL THEN :read_at ELSE read_at END"
+            " WHERE bellhop_id = :id AND ping_state IN ('pending', 'sending', 'sent')"
+            " AND instr(:order, '|' || ping_state || '|') <= instr(:order, '|' || :state || '|')",
             [
-                (item.state, now if item.state in READ_STATES else None, item.id)
+                {
+                    "state": item.state,
+                    "read_at": now if item.state in READ_STATES else None,
+                    "id": item.id,
+                    "order": STATE_ORDER,
+                }
                 for item in found.values()
             ],
         )

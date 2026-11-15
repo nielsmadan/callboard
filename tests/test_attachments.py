@@ -10,9 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from callboard.attachments import TEMP_PREFIX, media_type, store_blob
+import callboard.attachments as attachments_module
+from callboard.attachments import TEMP_PREFIX, media_type, prune, store_blob
 from callboard.errors import CallboardError
 from callboard.paths import attachments_dir, config_path, store_path
+from callboard.store import open_store
 from helpers import CLOCK, Callboard, FakeBellhop, rows, seed
 
 pytestmark = pytest.mark.usefixtures("ringing")
@@ -67,11 +69,12 @@ def test_files_round_trip_byte_identical(
         stored = Path(item["path"])
         assert stored.read_bytes() == original
         assert stored.name == hashlib.sha256(original).hexdigest()
-        assert stat.S_IMODE(stored.stat().st_mode) == 0o600
+        assert stat.S_IMODE(stored.stat().st_mode) == 0o400
         assert cb("--as", "nanna", "attachment", "get", item["id"]).out == f"{stored}\n"
         out = tmp_path / f"copy-{item['filename']}"
         assert cb("--as", "nanna", "attachment", "get", item["id"], "--out", str(out)).code == 0
         assert out.read_bytes() == original
+        assert stat.S_IMODE(out.stat().st_mode) == 0o600
 
 
 def test_the_same_file_twice_is_stored_once(cb: Callboard, files: dict[str, Path]) -> None:
@@ -151,6 +154,26 @@ def test_an_invalid_limit_is_a_config_error(
     result = cb("--as", "enki", "dm", "nanna", "hi", "--attach", str(files["pixel.png"]))
     assert result.code == 2
     assert result.err.startswith(f"callboard: {config_path(os.environ)}: max_attachment_bytes must")
+
+
+@pytest.mark.parametrize(
+    ("text", "named"),
+    [
+        ("max_attachment_byte = 10\n", "key 'max_attachment_byte'"),
+        ("a = 1\nb = 2\n", "keys 'a', 'b'"),
+    ],
+)
+def test_an_unknown_config_key_is_a_config_error_naming_it(
+    cb: Callboard, text: str, named: str
+) -> None:
+    path = config_path(os.environ)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    result = cb("--as", "enki", "dm", "nanna", "hi", "--json")
+    assert (result.code, result.json()["error"]) == (
+        2,
+        {"code": "invalid_config", "message": f"{path}: unknown {named}"},
+    )
 
 
 def test_an_unreadable_source_leaves_no_message_and_no_temp_file(
@@ -383,23 +406,39 @@ def test_prune_reports_a_wal_it_could_not_truncate(
     assert elapsed < 10
 
 
-def test_a_blob_pruned_while_it_is_reused_is_stored_again(
+def test_a_stored_blob_edited_in_place_is_restored_by_the_next_send(tmp_path: Path) -> None:
+    directory = tmp_path / "blobs"
+    first = store_blob(io.BytesIO(PNG), directory, 10_000, "x")
+    stored = directory / first.sha256
+    stored.chmod(0o600)
+    stored.write_bytes(b"edited")
+    second = store_blob(io.BytesIO(PNG), directory, 10_000, "x")
+    assert second == first
+    assert stored.read_bytes() == PNG
+    assert stat.S_IMODE(stored.stat().st_mode) == 0o400
+    assert [entry.name for entry in directory.iterdir()] == [first.sha256]
+
+
+def test_prune_keeps_an_orphan_a_send_refreshed_after_prune_looked_at_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     directory = tmp_path / "blobs"
-    first = store_blob(io.BytesIO(PNG), directory, 10_000, "x")
-    real_utime = os.utime
+    blob = store_blob(io.BytesIO(PNG), directory, 10_000, "x")
+    stored = directory / blob.sha256
+    os.utime(stored, (1_000_000_000, 1_000_000_000))
+    real_age = attachments_module._age
 
-    def pruned_meanwhile(path: object, *args: object) -> None:
-        Path(str(path)).unlink()
-        raise FileNotFoundError(path)
+    def refreshed_meanwhile(path: Path, now: float) -> tuple[float, int] | None:
+        found = real_age(path, now)
+        if path == stored:
+            store_blob(io.BytesIO(PNG), directory, 10_000, "x")
+        return found
 
-    monkeypatch.setattr("callboard.attachments.os.utime", pruned_meanwhile)
-    second = store_blob(io.BytesIO(PNG), directory, 10_000, "x")
-    monkeypatch.setattr("callboard.attachments.os.utime", real_utime)
-    assert second == first
-    assert (directory / first.sha256).read_bytes() == PNG
-    assert [entry.name for entry in directory.iterdir()] == [first.sha256]
+    monkeypatch.setattr("callboard.attachments._age", refreshed_meanwhile)
+    with closing(open_store(tmp_path / "store.sqlite")) as conn:
+        pruned = prune(conn, directory, time.time())
+    assert (pruned.blobs, stored.read_bytes()) == (0, PNG)
+    assert [entry.name for entry in directory.iterdir()] == [blob.sha256]
 
 
 @pytest.mark.parametrize(
@@ -447,3 +486,65 @@ def test_a_failed_out_copy_leaves_no_partial_file(
         f"callboard: --out: cannot write {out}: No space left on device\n",
     )
     assert not out.exists()
+
+
+def test_an_argument_that_is_not_utf8_copies_nothing(cb: Callboard, files: dict[str, Path]) -> None:
+    result = cb("--as", "enki", "dm", "nanna", "x\udcff", "--attach", str(files["pixel.png"]))
+    assert (result.code, result.err) == (2, "callboard: an argument is not valid UTF-8 text\n")
+    assert sorted(attachments_dir(os.environ).glob("*")) == []
+
+
+def test_attachment_get_prints_json(cb: Callboard, files: dict[str, Path], tmp_path: Path) -> None:
+    assert cb("--as", "enki", "dm", "nanna", "f", "--attach", str(files["pixel.png"])).code == 0
+    stored = attachments_dir(os.environ) / hashlib.sha256(PNG).hexdigest()
+    item = {
+        "id": "at_000000000002",
+        "filename": "pixel.png",
+        "media_type": "image/png",
+        "size": len(PNG),
+        "path": str(stored),
+    }
+    ok = {"schema_version": 1, "status": "ok", "warnings": []}
+    shown = cb("--as", "nanna", "attachment", "get", "at_000000000002", "--json").json()
+    assert shown == {**ok, "attachment": item, "out": None}
+    out = tmp_path / "copy.png"
+    copied = cb(
+        "--as", "nanna", "attachment", "get", "at_000000000002", "--out", str(out), "--json"
+    )
+    assert copied.json() == {**ok, "attachment": item, "out": str(out)}
+
+
+def test_prune_puts_back_a_blob_an_interrupted_prune_left_aside(tmp_path: Path) -> None:
+    directory = tmp_path / "blobs"
+    blob = store_blob(io.BytesIO(PNG), directory, 10_000, "x")
+    (directory / blob.sha256).rename(directory / f".tmp-prune-{blob.sha256}")
+    with closing(open_store(tmp_path / "store.sqlite")) as conn:
+        prune(conn, directory, time.time())
+    assert [entry.name for entry in directory.iterdir()] == [blob.sha256]
+
+
+def test_a_prune_interrupted_while_holding_a_blob_puts_it_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = tmp_path / "blobs"
+    blob = store_blob(io.BytesIO(PNG), directory, 10_000, "x")
+    os.utime(directory / blob.sha256, (1_000_000_000, 1_000_000_000))
+
+    def interrupted(path: Path, now: float) -> int | None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("callboard.attachments._remove_if_stale", interrupted)
+    with closing(open_store(tmp_path / "store.sqlite")) as conn, pytest.raises(KeyboardInterrupt):
+        prune(conn, directory, time.time())
+    assert (directory / blob.sha256).read_bytes() == PNG
+
+
+def test_attachment_get_reports_a_relative_out_as_absolute(
+    cb: Callboard, files: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert cb("--as", "enki", "dm", "nanna", "f", "--attach", str(files["pixel.png"])).code == 0
+    monkeypatch.chdir(tmp_path)
+    copied = cb(
+        "--as", "nanna", "attachment", "get", "at_000000000002", "--out", "rel.png", "--json"
+    )
+    assert copied.json()["out"] == str(Path.cwd() / "rel.png")

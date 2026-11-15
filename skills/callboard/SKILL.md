@@ -1,6 +1,6 @@
 ---
 name: callboard
-description: Message other coding agents on this machine (direct chat, group chat, mail with attachments) and read what they sent you. Use when you need to hand work to another agent, ask one something, answer a callboard message, or when a prompt starting "callboard cb_" arrives in your session.
+description: Message other coding agents on this machine (direct chat, group chat, mail with attachments) and read what they sent you. Use when you need to hand work to another agent, ask one something, answer a callboard message, or when a line with "callboard cb_" arrives in your session.
 ---
 
 # callboard
@@ -27,12 +27,13 @@ $ callboard who
 ```
 
 Use the handle your user gave you, or your bellhop agent name; if you have neither, ask your
-user. A handle is lowercase letters, digits, `_` and `-`. Never join a handle that `callboard who`
-already lists for another agent: joining moves that handle, and its pings, to you. A session holds
-one handle. If `join` says you are not inside a session bellhop knows, tell your user; do not join
-with `--human`, which nothing ever rings. If a command says `bellhop not found on PATH`, callboard
-cannot tell who you are: pass `--as <handle>` (before or after the command) or set
-`CALLBOARD_AS`.
+user. A handle is up to 64 lowercase letters, digits, `_` and `-`. Never join a handle that
+`callboard who` already lists, agent or human: an agent's handle and its pings would move to you.
+A session holds one handle. If `join` says you are not inside a session bellhop knows, tell your
+user; do not join with `--human`, which nothing ever rings. If a command says `bellhop not found on
+PATH`, pass `--as <handle>`. Never export `CALLBOARD_AS`. If `who` stars a handle that is not
+yours and adds `* is you through $CALLBOARD_AS`, it leaked in from your user's shell: run
+callboard as `env -u CALLBOARD_AS callboard …` and tell your user.
 
 ## Which command
 
@@ -47,7 +48,10 @@ cannot tell who you are: pass `--as <handle>` (before or after the command) or s
 Text comes from stdin when you leave it out: `callboard dm nanna < handoff.md`. Every recipient,
 group member and addressee must have joined. A handle whose route in `who` is `-` is never rung:
 it sees your message only when it runs `callboard inbox`.
-In a group only `@handle` of a member rings; everyone else just sees it unread.
+In a group only `@handle` of a member rings; everyone else just sees it unread. A dm, an
+`@mention` or `--urgent` mail to an agent configured in bellhop that is not running starts it,
+with the ping (your message, or a pointer to it) as its first prompt; use `--no-ping`, or mail
+without `--urgent`, when it must not be started.
 
 ## Direct messages
 
@@ -83,13 +87,14 @@ recipient's `bellhop inbox` unless you pass `--urgent`.
 
 ## Reading
 
-A short message (500 characters or less, no attachments) arrives in your session in full:
+A short message (500 characters or less, no attachments) arrives in your session in full, after
+bellhop's prefix (Claude Code shows it as a message from another session):
 
 ```
-callboard cb_8a4e4c69fbe3 dm from enki: short note
+[bellhop bh_775d2d2b02e9 from cl] callboard cb_1e84944a8cea dm from cl: pong cb694bfb
 ```
 
-Answer where it came from: `callboard dm <sender>` for `dm`, `callboard group send <name>` for
+Answer with callboard, never `bellhop send`, and where it came from: `callboard dm <sender>` for `dm`, `callboard group send <name>` for
 `group <name>`, `callboard mail reply <id>` for `mail`. `--reply-to <id>` threads a `dm` or
 `group send` answer and must name a message in the same conversation. Anything longer, anything
 with attachments, and all mail without `--urgent` arrive as a doorbell that names the command to
@@ -100,7 +105,10 @@ callboard cb_c26523f1a44d dm from enki (600 chars); read: callboard read cb_c265
 callboard cb_150aa32e4334 mail "Release plan" from enki (62 chars); read: callboard read cb_150aa32e4334
 ```
 
-A group ping names the group the same way: `group release from enki`.
+A group ping names the group the same way: `group release from enki`. When a ping ends with
+`(bellhop: N more waiting; run bellhop inbox)`, run `bellhop inbox`: its `callboard cb_…` lines are
+doorbells, so run the `callboard read <id>` each names unless you already read it. Doorbells of mail
+you read with `callboard read mail:<id>` stay there until you run `bellhop inbox`.
 
 Check `callboard inbox` at natural stopping points: after finishing a task and before going idle.
 
@@ -120,23 +128,16 @@ A ref is `@handle`, `group:<name>`, `mail:<id>` or a message id `cb_…`.
 ## Attachments
 
 Attach files with `--attach PATH` (repeatable) on `dm`, `group send` and `mail`. They are copied
-into callboard's store; `read` and `history` print each stored path in full (shown here with
-your home directory as `~`):
-
-```
-$ callboard read @enki
-cb_6565cc6e5ff2  2026-11-13T23:39:29Z  enki: trace from the failing run
-  attachment at_2f3c26afe74a  trace.log  text/plain  26 bytes  ~/.local/share/callboard/attachments/56ef480c531c12f003aac8bba2b020c557a22075363f2ada374fe2a1b699fac5
-```
-
-Read that path with your normal file tools. `callboard attachment get <id> --out <file>` copies it.
+into callboard's store, and `read` and `history` print each one as `attachment <id>  <name>
+<type>  <size> bytes  <stored path>`. Read that path with your normal file tools; it is read-only
+and shared by every message with the same content, so never edit it.
+`callboard attachment get <id> --out <file>` copies it.
 
 ## When something goes wrong
 
 A failed ring never loses the message. It is stored, the command exits 0, and a warning names
 the problem. `callboard doctor` checks the setup; `callboard doctor --reping` rings again
-whatever bellhop never accepted. `who`, `inbox`, `read`, `history`, `receipts`, `doctor` and the
-send commands take `--json` and then print one JSON object.
+whatever bellhop never accepted. Every command takes `--json` and then prints one JSON object.
 
 ## What it cannot do
 

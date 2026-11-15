@@ -7,16 +7,23 @@ import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import cast, get_args
 
 from callboard.codes import HLS_UNAVAILABLE_EXIT, NOT_FOUND_EXIT
 from callboard.errors import CallboardError
 from callboard.models import BellhopMessage, BellhopSession, PingState
+from callboard.text import shortened
 
 STATES: frozenset[str] = frozenset(get_args(PingState.__value__))
 
 POLL_SECONDS = 0.1
+COMMAND_SECONDS = 10.0
+TEXT_LIMIT = 300
+
+
+class BellhopTimeout(CallboardError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -28,8 +35,9 @@ class Reply:
 @dataclass(frozen=True)
 class Caller:
     command: tuple[str, ...]
-    env: Mapping[str, str]
+    env: Mapping[str, str] = field(repr=False)
     deadline: float
+    budget: float
 
 
 def caller_for(
@@ -38,7 +46,7 @@ def caller_for(
     budget: float,
     now: Callable[[], float] = time.monotonic,
 ) -> Caller:
-    return Caller(tuple(command), env, now() + budget)
+    return Caller(tuple(command), env, now() + budget, budget)
 
 
 def resumed(caller: Caller, paused_at: float, now: Callable[[], float] = time.monotonic) -> Caller:
@@ -66,15 +74,14 @@ def _wait(
     data: bytes | None,
     timeout: float,
     cancel: threading.Event | None,
-) -> bytes:
+) -> tuple[bytes, bytes]:
     end = time.monotonic() + max(timeout, 0.001)
     first = data
     while True:
         try:
-            stdout, _ = process.communicate(
+            return process.communicate(
                 first, timeout=max(min(POLL_SECONDS, end - time.monotonic()), 0.001)
             )
-            return stdout
         except subprocess.TimeoutExpired:
             first = None
             if time.monotonic() >= end:
@@ -89,7 +96,7 @@ def _exchange(
     timeout: float,
     stdin: str | None,
     cancel: threading.Event | None,
-) -> tuple[int, bytes]:
+) -> tuple[int, bytes, bytes]:
     with subprocess.Popen(
         argv,
         stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
@@ -99,11 +106,18 @@ def _exchange(
         start_new_session=True,
     ) as process:
         try:
-            stdout = _wait(process, None if stdin is None else stdin.encode(), timeout, cancel)
+            stdout, stderr = _wait(
+                process, None if stdin is None else stdin.encode(), timeout, cancel
+            )
         except BaseException:
             _kill_group(process)
             raise
-        return process.returncode, stdout
+        return process.returncode, stdout, stderr
+
+
+def _last_line(raw: bytes) -> str:
+    lines = [line for line in raw.decode(errors="replace").splitlines() if line.strip()]
+    return f": {shortened(lines[-1].strip(), TEXT_LIMIT)}" if lines else ""
 
 
 def run(
@@ -117,10 +131,12 @@ def run(
     name = f"bellhop {arguments[0]}"
     found = executable(command, env)
     try:
-        returncode, raw = _exchange([found, *command[1:], *arguments], env, timeout, stdin, cancel)
+        returncode, raw, errors = _exchange(
+            [found, *command[1:], *arguments], env, timeout, stdin, cancel
+        )
         text = raw.decode()
     except subprocess.TimeoutExpired as error:
-        raise CallboardError(
+        raise BellhopTimeout(
             f"{name} timed out after {timeout:.1f}s", code="bellhop_failed"
         ) from error
     except OSError as error:
@@ -135,7 +151,7 @@ def run(
         payload = None
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise CallboardError(
-            f"{name} printed no schema_version 1 JSON (exit {returncode})",
+            f"{name} printed no schema_version 1 JSON (exit {returncode}){_last_line(errors)}",
             code="bellhop_failed",
         )
     return Reply(returncode, payload)
@@ -147,13 +163,15 @@ def call(
     stdin: str | None = None,
     now: Callable[[], float] = time.monotonic,
     cancel: threading.Event | None = None,
+    worst: float = COMMAND_SECONDS,
 ) -> Reply:
     remaining = caller.deadline - now()
     if remaining <= 0:
         raise CallboardError(
             f"bellhop {arguments[0]}: no time left before the deadline", code="bellhop_failed"
         )
-    return run(caller.command, arguments, caller.env, remaining, stdin, cancel)
+    limit = max(remaining, min(worst, caller.budget))
+    return run(caller.command, arguments, caller.env, limit, stdin, cancel)
 
 
 def error_code(payload: Mapping[str, object]) -> str | None:
@@ -165,13 +183,21 @@ def error_code(payload: Mapping[str, object]) -> str | None:
 def error_message(payload: Mapping[str, object]) -> str:
     error = payload.get("error")
     message = error.get("message") if isinstance(error, dict) else None
-    return message if isinstance(message, str) else "no message"
+    return shortened(message, TEXT_LIMIT) if isinstance(message, str) else "no message"
+
+
+def _candidates(payload: Mapping[str, object]) -> bool:
+    error = payload.get("error")
+    found = error.get("candidates") if isinstance(error, dict) else None
+    return isinstance(found, list) and bool(found)
 
 
 def require_ok(reply: Reply, name: str) -> dict[str, object]:
     if reply.payload.get("status") == "ok":
         return reply.payload
     message = f"bellhop {name}: {error_message(reply.payload)}"
+    if reply.exit_code == NOT_FOUND_EXIT and _candidates(reply.payload):
+        raise CallboardError(message, code="identity_ambiguous")
     if reply.exit_code == NOT_FOUND_EXIT:
         raise CallboardError(message, code="not_in_session")
     if reply.exit_code == HLS_UNAVAILABLE_EXIT:
@@ -185,7 +211,8 @@ def _text(value: object) -> str | None:
 
 def warnings_of(payload: Mapping[str, object]) -> list[str]:
     found = payload.get("warnings")
-    return [item for item in found if isinstance(item, str)] if isinstance(found, list) else []
+    items = found if isinstance(found, list) else []
+    return [shortened(item, TEXT_LIMIT) for item in items if isinstance(item, str)]
 
 
 def parse_whoami(payload: Mapping[str, object]) -> BellhopSession:
@@ -194,8 +221,6 @@ def parse_whoami(payload: Mapping[str, object]) -> BellhopSession:
         raise CallboardError("bellhop whoami returned no session", code="bellhop_failed")
     return BellhopSession(
         session_id=session["session_id"],
-        harness=str(session.get("harness")),
-        title=_text(session.get("title")),
         agent=_text(session.get("agent")),
     )
 
@@ -234,7 +259,6 @@ def parse_message(value: object) -> BellhopMessage | None:
         identifier,
         cast("PingState", state),
         _text(value.get("urgency")),
-        _text(value.get("degraded_from")),
         _text(value.get("detail")),
     )
 

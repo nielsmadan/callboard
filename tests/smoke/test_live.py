@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from bellhop.drain import drainer_running
+from bellhop.testing import drainer_running
 from bellhop.testing.run import SmokeRun, descendants, ps
 from bellhop.testing.tmux import SmokeTmux
 

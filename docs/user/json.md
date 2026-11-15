@@ -1,6 +1,6 @@
 # JSON output
 
-Every command that takes `--json` prints exactly one JSON object on stdout and nothing else.
+Every command takes `--json` and then prints exactly one JSON object on stdout and nothing else.
 Diagnostics go to stderr, prefixed `callboard: `. The contract below is `schema_version` 1.
 
 ## Envelope
@@ -34,7 +34,7 @@ in this envelope too, whenever `--json` appears on the command line.
 | Exit | Meaning | `error.code` values |
 |---|---|---|
 | 0 | ok | — |
-| 1 | failure | `attachment_missing`, `bellhop_failed`, `doctor_failed`, `group_exists`, `internal_error`, `invalid_environment`, `schema_too_new`, `store_unavailable` |
+| 1 | failure | `attachment_missing`, `bellhop_failed`, `doctor_failed`, `group_exists`, `handle_taken`, `internal_error`, `invalid_environment`, `schema_too_new`, `store_unavailable` |
 | 2 | usage | `invalid_config`, `usage` |
 | 3 | not found or ambiguous | `attachment_not_found`, `conversation_not_found`, `identity_ambiguous`, `identity_not_found`, `message_not_found`, `not_a_member`, `not_in_session`, `unknown_handle` |
 | 4 | no usable route | — (callboard rings with `--or-hold`, so bellhop's exit 4 becomes a warning) |
@@ -47,13 +47,18 @@ in this envelope too, whenever `--json` appears on the command line.
   with it).
 - `identity_not_found`: the caller's session has not joined. The message ends with
   `run: callboard join <handle>`.
-- `identity_ambiguous`: more than one handle is routed to the caller's session; pass `--as`.
+- `identity_ambiguous`: more than one handle is routed to the caller's session, or bellhop places
+  the caller in more than one live session; pass `--as`.
 - `unknown_handle`: `--as`, `$CALLBOARD_AS`, a recipient or a group member names no participant.
 - `store_unavailable`: the store cannot be created, opened, written or migrated.
 - `schema_too_new`: the store was written by a newer callboard.
 - `internal_error`: an unexpected failure; the message names the Python exception. Please report
   it.
-- `invalid_config`: `config.toml` cannot be parsed or has an invalid value.
+- `invalid_config`: `config.toml` cannot be parsed, has an invalid value, or has a key callboard
+  does not know (the message names it).
+- `handle_taken`: `join --human` named an agent's handle whose route still resolves in bellhop
+  (a live session or a configured agent; also when bellhop cannot say), or `join` from an agent
+  session named a human's handle.
 - `attachment_missing`: an attachment row exists but its file is gone from `attachments/`.
 - An `--attach` path that is missing, not a regular file, unreadable or over the size limit is
   `usage` (exit 2), and nothing is stored.
@@ -101,12 +106,52 @@ the id itself.
 ## `callboard who --json`
 
 ```json
-{"schema_version": 1, "status": "ok", "warnings": [], "you": "enki", "participants": [participant, ...]}
+{"schema_version": 1, "status": "ok", "warnings": [], "you": "enki", "you_from": "session",
+ "participants": [participant, ...]}
 ```
 
-`you` is the caller's handle, or `null` when the caller cannot be resolved. In that case,
+`you` is the caller's handle, or `null` when the caller cannot be resolved. `you_from` says how it
+was found: `"--as"`, `"CALLBOARD_AS"` or `"session"` (`bellhop whoami`), or `null` with `you`. In that case,
 ambiguity, an hls outage or a bellhop failure is reported in `warnings`. Participants are sorted
 by handle.
+
+## `callboard join <handle> --json`
+
+```json
+{"schema_version": 1, "status": "ok", "warnings": [], "participant": {"handle": "enki", "kind": "agent",
+ "route": "enki", "created_at": "2026-11-14T21:06:17Z"}, "previous": null, "displaced": []}
+```
+
+`participant` is the handle as joined. `previous` is the same handle as it was before, or `null`
+for a new one. `displaced` lists other handles this session held, which lose their route.
+`warnings` repeats what the text mode prints on stderr about them.
+
+## `callboard group create|add|remove … --json`
+
+```json
+{"schema_version": 1, "status": "ok", "warnings": [], "conversation": "group:release", "name": "release",
+ "project": "callboard", "members": ["enki", "nanna"]}
+{"schema_version": 1, "status": "ok", "warnings": [], "conversation": "group:release", "handle": "niels", "added": true}
+{"schema_version": 1, "status": "ok", "warnings": [], "conversation": "group:release", "handle": "niels", "group_deleted": false}
+```
+
+A top-level `conversation` is always a conversation id string, as in the send output below;
+message objects name the same id `conversation_id`. `create` returns the group's name, project
+and sorted members. `add` says whether the handle was added
+(`false` when it was already a member). `remove` says whether the group was deleted because its
+last member left.
+
+## `callboard attachment get <attachment-id> --json`
+
+```json
+{"schema_version": 1, "status": "ok", "warnings": [], "attachment": {"id": "at_296f71e85086",
+ "filename": "notes.txt", "media_type": "text/plain", "size": 6,
+ "path": "/home/u/.local/share/callboard/attachments/5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"},
+ "out": null}
+```
+
+`attachment` is the shared attachment object. `out` is the absolute path the `--out` copy was
+written to, or `null` without `--out`.
 
 ## `callboard doctor --json`
 
@@ -115,7 +160,7 @@ by handle.
   "schema_version": 1, "status": "ok", "warnings": [],
   "checks": [
     {"name": "data_dir", "status": "ok", "detail": "/home/u/.local/share/callboard"},
-    {"name": "store", "status": "ok", "detail": "schema version 1, 3 participants"},
+    {"name": "store", "status": "ok", "detail": "schema version 2, 3 participants"},
     {"name": "bellhop", "status": "ok", "detail": "/usr/local/bin/bellhop"},
     {"name": "routes", "status": "warn", "detail": "1 of 2 routes no longer resolve"},
     {"name": "config", "status": "ok", "detail": "/home/u/.config/callboard/config.toml"}
@@ -164,24 +209,36 @@ whole message (idle or now, 500 characters or less, no attachments). An inline p
 `confirmed` already has `read_at` set.
 
 Ringing never fails the command. Problems with a recipient's ping add strings to `warnings`
-(also printed to stderr), such as `"ping nanna for cb_000000000001: bellhop send timed
-out after 20.0s"`. A receipt stays `pending` without a `bellhop_id` when bellhop was missing, slow,
-printed malformed output or reported hls unavailable (`doctor --reping` rings it again), and
-becomes `failed` when bellhop refused the ping (`usage`, `target_not_found`, `target_ambiguous`
-or `no_route`), rejected the push, or answered `launch_failed`. Other bellhop errors, such as `invalid_config` or
+(also printed to stderr), such as `"ping nanna for cb_000000000001: bellhop not found on PATH"`.
+Text from bellhop in them (error messages, details, warnings) shows control characters escaped
+and is cut to 300 characters.
+A receipt stays `pending` without a `bellhop_id` when bellhop was missing, slow, printed malformed
+output or reported hls unavailable (`doctor --reping` rings it again). A send that timed out may
+already have been pushed, so its warning ends `the outcome is unknown; callboard doctor --reping
+settles it`: the re-ring uses the same `--key`, and bellhop answers with the message it already
+holds. A bellhop `usage` answer means callboard and bellhop do not match, so the receipt stays
+`pending` and the warning says so. A receipt becomes `failed` when bellhop refused the ping
+(`target_not_found`, `target_ambiguous` or `no_route`), rejected the push, or answered
+`launch_failed`. A receipt's `ping_state` never moves backwards: once `confirmed` or `read`, a
+late refusal or an older status does not change it. Other bellhop errors, such as `invalid_config` or
 `store_error`, leave it `pending` for `doctor --reping`. When bellhop had already stored the ping
 before failing (`interrupted`, `internal_error`), the receipt gets its `bellhop_id` and state and
 is refreshed rather than rung again; a stored ping bellhop reports `failed` (for example
 `expired`) is `failed` with a warning. A direct or group ping bellhop returns with urgency `hold`,
 because the target had no usable route, adds a warning ending in
-`held by bellhop; no usable route for idle`; a `--now` ping bellhop delivered as `idle` is not
-held and adds nothing. Warnings bellhop itself attached to a send, such as
+`held by bellhop; no usable route for idle`; a `--now` ping bellhop delivered as `idle` is not held
+and adds nothing. Warnings bellhop itself attached to a send, such as
 `cannot confirm: no transcript to read for this session`, are passed on as
 `ping <recipient> for <id>: bellhop send: <warning>`. Two routine ones are left out:
 `not confirmed within 5s`, since the receipt already says `sent` and a later refresh upgrades it,
-and `--confirm does not wait for a message that starts its agent`, since the receipt of a ping
-that woke its recipient is `pending` until the agent is up. The text output stays one line,
-`sent <id> to <ref>`.
+and `--confirm does not wait for a message that starts its agent`, since the receipt of a ping that
+woke its recipient is `pending` until the agent is up. Every other bellhop warning is passed on,
+among them `the now message waits: <why>` for a `--now` ping bellhop could not deliver yet,
+`key '<key>' is already stored for <id> with another target or text` when a reping no longer matches
+what bellhop stored, and `'<agent>' is not running; the message waits (use --wake to start it)`,
+which only a `ping_command` that drops `--wake` can produce. A receipt refresh passes on bellhop's
+own warnings the same way, as `refreshing receipts: bellhop status: <warning>`, for example
+`cannot recheck transcripts: <why>`. The text output stays one line, `sent <id> to <ref>`.
 
 ## `callboard inbox --json`
 
@@ -234,4 +291,5 @@ not `hold`, have a `bellhop_id` and belong to a message younger than 15 minutes,
 
 There is one receipt per recipient, sorted by handle; the sender has none. `ping` is `none`,
 `hold`, `idle` or `now`. `ping_state` is `null` when `ping` is `none`; otherwise it starts as
-`pending` and later mirrors the bellhop message state.
+`pending` and later mirrors the bellhop message state, except for `hold` pings and pings older
+than 15 minutes, which are not refreshed and keep the state they had.

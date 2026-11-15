@@ -1,5 +1,6 @@
 import re
 import sqlite3
+from collections.abc import Mapping
 
 from callboard.bellhop_client import (
     Caller,
@@ -13,15 +14,16 @@ from callboard.errors import CallboardError
 from callboard.models import BellhopSession, Participant
 from callboard.store import participant, participants_with_route
 
-HANDLE = re.compile(r"[a-z0-9][a-z0-9_-]*")
+HANDLE_LIMIT = 64
+HANDLE = re.compile(rf"[a-z0-9][a-z0-9_-]{{0,{HANDLE_LIMIT - 1}}}")
 JOIN_HINT = "run: callboard join <handle>"
 
 
 def validate_handle(handle: str, source: str = "handle") -> str:
     if HANDLE.fullmatch(handle) is None:
         raise CallboardError(
-            f"{source} '{handle}' is not a valid handle; use lowercase letters, digits, '_' and"
-            " '-', starting with a letter or digit",
+            f"{source} '{handle}' is not a valid handle; use up to {HANDLE_LIMIT} lowercase"
+            " letters, digits, '_' and '-', starting with a letter or digit",
             code="usage",
         )
     return handle
@@ -54,8 +56,7 @@ def _explicit(conn: sqlite3.Connection, handle: str, source: str) -> Participant
 
 
 def _joined(conn: sqlite3.Connection, session: BellhopSession) -> Participant:
-    routes = [route for route in (session.agent, session.session_id) if route]
-    for route in routes:
+    for route in session_routes(session):
         matches = participants_with_route(conn, route)
         if len(matches) > 1:
             handles = ", ".join(match.handle for match in matches)
@@ -68,6 +69,16 @@ def _joined(conn: sqlite3.Connection, session: BellhopSession) -> Participant:
     raise CallboardError(
         f"this session has not joined callboard; {JOIN_HINT}", code="identity_not_found"
     )
+
+
+def identity_source(as_handle: str | None, env: Mapping[str, str]) -> str:
+    if as_handle:
+        return "--as"
+    return "CALLBOARD_AS" if env.get("CALLBOARD_AS") else "session"
+
+
+def session_routes(session: BellhopSession) -> tuple[str, ...]:
+    return tuple(route for route in (session.agent, session.session_id) if route)
 
 
 def resolve_caller(conn: sqlite3.Connection, as_handle: str | None, caller: Caller) -> Participant:

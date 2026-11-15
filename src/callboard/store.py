@@ -4,6 +4,7 @@ import stat
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -72,7 +73,12 @@ SCHEMA_V1: tuple[str, ...] = (
 )""",
 )
 
-MIGRATIONS: tuple[tuple[str, ...], ...] = (SCHEMA_V1,)
+SCHEMA_V2: tuple[str, ...] = (
+    "CREATE INDEX receipts_recipient ON receipts (recipient, read_at)",
+    "CREATE INDEX attachments_message ON attachments (message_id)",
+)
+
+MIGRATIONS: tuple[tuple[str, ...], ...] = (SCHEMA_V1, SCHEMA_V2)
 
 
 class _Executes(Protocol):
@@ -222,15 +228,56 @@ def participants_with_route(conn: sqlite3.Connection, route: str) -> list[Partic
     return [_participant(row) for row in rows]
 
 
+def taken(
+    handle: str, kind: ParticipantKind, previous: Participant | None, session: "Session"
+) -> str | None:
+    if previous is None:
+        return None
+    if kind == "agent" and previous.kind == "human":
+        return f"handle '{handle}' is taken by a human; pick another handle"
+    if kind != "human" or previous.kind != "agent" or not previous.route:
+        return None
+    if session.live_routes is None:
+        return (
+            f"handle '{handle}' is taken by agent route {previous.route}, and bellhop cannot say"
+            f" whether that route still resolves ({session.unknown}); pick another handle"
+        )
+    if previous.route in session.live_routes:
+        return (
+            f"handle '{handle}' is taken by agent route {previous.route}, which bellhop still"
+            " knows; pick another handle"
+        )
+    return None
+
+
+@dataclass(frozen=True)
+class Session:
+    routes: tuple[str, ...] = ()
+    live_routes: frozenset[str] | None = None
+    unknown: str = "not checked"
+
+
 def join_participant(
-    conn: sqlite3.Connection, handle: str, kind: ParticipantKind, route: str | None, now: str
+    conn: sqlite3.Connection,
+    handle: str,
+    kind: ParticipantKind,
+    route: str | None,
+    now: str,
+    session: Session = Session(),
 ) -> JoinOutcome:
+    routes = dict.fromkeys([*([route] if route else []), *session.routes])
     with write(conn):
         previous = participant(conn, handle)
+        refusal = taken(handle, kind, previous, session)
+        if refusal:
+            raise CallboardError(refusal, code="handle_taken")
         displaced = tuple(
-            other.handle
-            for other in (participants_with_route(conn, route) if route else [])
-            if other.handle != handle
+            dict.fromkeys(
+                other.handle
+                for each in routes
+                for other in participants_with_route(conn, each)
+                if other.handle != handle
+            )
         )
         conn.executemany(
             "UPDATE participants SET route = NULL WHERE handle = ?",

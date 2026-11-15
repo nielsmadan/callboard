@@ -1,6 +1,7 @@
 import sqlite3
 import stat
 from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from callboard.store import (
     BUSY_TIMEOUT_SECONDS,
     MIGRATIONS,
     WAL_RETRY_SECONDS,
+    connect,
     enable_wal,
     migrate,
     open_store,
@@ -41,7 +43,7 @@ def test_open_creates_a_private_store_at_the_current_schema(tmp_path: Path) -> N
     path = tmp_path / "data" / "callboard.sqlite"
     conn = open_store(path)
     try:
-        assert schema_version(conn) == len(MIGRATIONS) == 1
+        assert schema_version(conn) == len(MIGRATIONS)
         assert _tables(conn) == TABLES
         assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
@@ -61,7 +63,7 @@ def test_reopening_keeps_rows_and_version(tmp_path: Path) -> None:
     conn.close()
     conn = open_store(path)
     try:
-        assert schema_version(conn) == 1
+        assert schema_version(conn) == len(MIGRATIONS)
         assert [row["handle"] for row in conn.execute("SELECT handle FROM participants")] == ["a"]
     finally:
         conn.close()
@@ -73,7 +75,7 @@ def test_a_later_migration_is_applied_forward_once(tmp_path: Path) -> None:
     try:
         migrate(conn, later)
         migrate(conn, later)
-        assert schema_version(conn) == 2
+        assert schema_version(conn) == len(MIGRATIONS) + 1
         columns = [row[1] for row in conn.execute("PRAGMA table_info(participants)")]
         assert columns[-1] == "note"
     finally:
@@ -90,7 +92,7 @@ def test_a_newer_schema_is_refused(tmp_path: Path) -> None:
     assert (caught.value.code, caught.value.exit_code, str(caught.value)) == (
         "schema_too_new",
         1,
-        "store schema version 7 is newer than this callboard supports (1); upgrade callboard",
+        "store schema version 7 is newer than this callboard supports (2); upgrade callboard",
     )
 
 
@@ -169,7 +171,7 @@ def test_a_migration_applied_meanwhile_by_another_process_is_skipped(tmp_path: P
 
     try:
         migrate(slow, Racing(later))
-        assert schema_version(slow) == 2
+        assert schema_version(slow) == len(MIGRATIONS) + 1
         columns = [row[1] for row in slow.execute("PRAGMA table_info(participants)")]
         assert columns.count("note") == 1
     finally:
@@ -214,3 +216,15 @@ def test_switching_to_wal_does_not_retry_other_errors() -> None:
     with pytest.raises(sqlite3.OperationalError, match="disk I/O error"):
         enable_wal(conn, now=lambda: 0.0, sleep=lambda _: None)
     assert len(conn.calls) == 1
+
+
+def test_a_version_1_store_gains_the_lookup_indexes(tmp_path: Path) -> None:
+    path = tmp_path / "callboard.sqlite"
+    with closing(connect(path)) as conn:
+        migrate(conn, MIGRATIONS[:1])
+    with closing(open_store(path)) as conn:
+        indexes = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
+        }
+        assert schema_version(conn) == len(MIGRATIONS)
+    assert {"receipts_recipient", "attachments_message"} <= indexes

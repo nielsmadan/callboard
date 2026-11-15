@@ -11,6 +11,7 @@ from callboard.bellhop_client import Caller
 from callboard.cli.context import as_caller, bellhop, settings
 from callboard.cli.presentation import diagnostic, emit
 from callboard.cli.rendering import (
+    attachment_json,
     inbox_json,
     inbox_lines,
     message_json,
@@ -24,7 +25,7 @@ from callboard.errors import CallboardError
 from callboard.jsonout import ok_payload
 from callboard.messages import history as history_of
 from callboard.messages import read_conversation, read_message, require_message
-from callboard.models import Runtime
+from callboard.models import Attachment, Runtime
 from callboard.paths import attachments_dir
 from callboard.ping import refresh
 from callboard.receipts import inbox as inbox_of
@@ -115,6 +116,20 @@ def receipts(args: argparse.Namespace, runtime: Runtime) -> int:
     return 0
 
 
+def _got(args: argparse.Namespace, item: Attachment, runtime: Runtime, line: str) -> None:
+    payload = ok_payload(
+        {
+            "attachment": attachment_json(item, attachments_dir(runtime.env)),
+            "out": None if args.out is None else os.path.abspath(args.out),
+        }
+    )
+    emit(payload, [line], json_mode=args.json)
+
+
+def _private(path: str, flags: int) -> int:
+    return os.open(path, flags, 0o600)
+
+
 def attachment(args: argparse.Namespace, runtime: Runtime) -> int:
     bell = bellhop(runtime, settings(runtime))
     with as_caller(args, runtime, bell) as (conn, caller):
@@ -129,13 +144,13 @@ def attachment(args: argparse.Namespace, runtime: Runtime) -> int:
             f"attachment {item.id} is missing its file {stored}", code="attachment_missing"
         )
     if args.out is None:
-        print(stored)
+        _got(args, item, runtime, str(stored))
         return 0
     if os.path.isdir(args.out):
         raise CallboardError(f"--out: {args.out} is a directory; name a file", code="usage")
     created = False
     try:
-        with stored.open("rb") as source, open(args.out, "xb") as target:
+        with stored.open("rb") as source, open(args.out, "xb", opener=_private) as target:
             created = True
             shutil.copyfileobj(source, target)
     except FileExistsError as error:
@@ -146,5 +161,5 @@ def attachment(args: argparse.Namespace, runtime: Runtime) -> int:
         raise CallboardError(
             f"--out: cannot write {args.out}: {error.strerror}", code="usage"
         ) from error
-    print(args.out)
+    _got(args, item, runtime, args.out)
     return 0

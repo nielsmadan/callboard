@@ -16,8 +16,10 @@ from callboard.models import Attachment
 
 CHUNK_BYTES = 1024 * 1024
 TEMP_PREFIX = ".tmp-"
+PRUNE_PREFIX = f"{TEMP_PREFIX}prune-"
 BLOB_NAME = re.compile(r"[0-9a-f]{64}")
 PRUNE_GRACE_SECONDS = 3600.0
+BLOB_MODE = 0o400
 
 
 @dataclass(frozen=True)
@@ -72,12 +74,8 @@ def store_blob(source: BinaryIO, directory: Path, limit: int, label: str) -> Blo
 
 
 def _keep(temp: str, target: Path) -> None:
-    try:
-        os.utime(target)
-    except FileNotFoundError:
-        os.rename(temp, target)
-    else:
-        os.unlink(temp)
+    os.chmod(temp, BLOB_MODE)
+    os.replace(temp, target)
 
 
 def _checked(path: Path, limit: int) -> Path:
@@ -166,7 +164,40 @@ def _remove_if_stale(path: Path, now: float) -> int | None:
     return found[1]
 
 
+def _remove_orphan(path: Path, now: float) -> int | None:
+    found = _age(path, now)
+    if found is None or found[0] <= PRUNE_GRACE_SECONDS:
+        return None
+    held = path.with_name(f"{PRUNE_PREFIX}{path.name}")
+    try:
+        os.rename(path, held)
+    except FileNotFoundError:
+        return None
+    try:
+        size = _remove_if_stale(held, now)
+    except BaseException:
+        _put_back(held, path)
+        raise
+    if size is None:
+        _put_back(held, path)
+    return size
+
+
+def _put_back(held: Path, path: Path) -> None:
+    with suppress(FileNotFoundError):
+        os.rename(held, path)
+
+
+def _restore_interrupted(directory: Path) -> None:
+    for held in sorted(directory.glob(f"{PRUNE_PREFIX}*")):
+        name = held.name.removeprefix(PRUNE_PREFIX)
+        if BLOB_NAME.fullmatch(name) and not (directory / name).exists():
+            _put_back(held, directory / name)
+
+
 def prune(conn: sqlite3.Connection, directory: Path, now: float) -> Pruned:
+    if directory.is_dir():
+        _restore_interrupted(directory)
     referenced = {row[0] for row in conn.execute("SELECT DISTINCT sha256 FROM attachments")}
     entries = sorted(directory.iterdir()) if directory.is_dir() else []
     orphans = [
@@ -175,7 +206,7 @@ def prune(conn: sqlite3.Connection, directory: Path, now: float) -> Pruned:
         if BLOB_NAME.fullmatch(entry.name) and entry.name not in referenced
     ]
     temps = [entry for entry in entries if entry.name.startswith(TEMP_PREFIX)]
-    removed = [size for entry in orphans if (size := _remove_if_stale(entry, now)) is not None]
+    removed = [size for entry in orphans if (size := _remove_orphan(entry, now)) is not None]
     stale_temps = [entry for entry in temps if _remove_if_stale(entry, now) is not None]
     return Pruned(len(removed), sum(removed), len(stale_temps), truncate_wal(conn))
 
