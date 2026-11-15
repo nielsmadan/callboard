@@ -26,6 +26,7 @@ warn  data_dir  ~/.local/share/callboard absent; created by the first callboard 
 warn  store     ~/.local/share/callboard/callboard.sqlite absent; created by the first callboard join
 ok    bellhop   ~/.local/bin/bellhop
 ok    routes    no agent routes to check
+ok    config    ~/.config/callboard/config.toml absent; using the defaults
 ```
 
 The two warnings go away after the first `join`. A `fail` line makes `doctor` exit 1.
@@ -54,15 +55,16 @@ A human joins without a session and has no route, so nothing rings them. They ac
 (before or after the command) or `$CALLBOARD_AS`:
 
 ```
-$ callboard join nanna --human
-joined as nanna (human, no route)
-$ callboard --as nanna who
+$ callboard join niels --human
+joined as niels (human, no route)
+$ callboard --as niels who
    handle  kind   route
    enki    agent  enki
-*  nanna   human  -
+*  niels   human  -
 ```
 
-Anyone on the machine can act as any handle this way. callboard does not authenticate senders.
+A message to a handle whose route is `-` is stored without a ping; that handle sees it only by
+running `inbox`. Anyone on the machine can act as any handle this way. callboard does not authenticate senders.
 
 ## Teach your agents
 

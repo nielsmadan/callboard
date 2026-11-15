@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "message": {
+    "id": "bh_000000000001",
+    "key": null,
+    "sender": "enki",
+    "urgency": "idle",
+    "state": "failed",
+    "degraded_from": null,
+    "route": "fake",
+    "detail": "expired",
+    "created_at": "2026-11-14T09:00:00Z",
+    "sent_at": null,
+    "confirmed_at": null,
+    "target": {
+      "kind": "session",
+      "agent": null,
+      "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
+      "harness": "claude",
+      "title": "alpha"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import re
 from collections.abc import Collection
 
-MENTION = re.compile(r"(?<![\w.@+-])@([a-z0-9][a-z0-9_-]*)(?![\w@])")
+MENTION = re.compile(r"(?<![\w.@+-])@([a-z0-9][a-z0-9_-]*+)(?![\w@])")
 
 
 def _member(captured: str, members: Collection[str]) -> str | None:

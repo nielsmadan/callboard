@@ -12,7 +12,7 @@ from typing import Literal
 from callboard.attachments import Pruned, prune
 from callboard.bellhop_client import Caller, caller_for, executable
 from callboard.cli.presentation import diagnostic, emit
-from callboard.config import load_config
+from callboard.config import Config, load_config
 from callboard.errors import CallboardError
 from callboard.identity import live_routes
 from callboard.jsonout import error_payload, ok_payload
@@ -80,6 +80,15 @@ def check_store(path: Path) -> tuple[Check, list[Participant]]:
             "store", "warn", f"schema version {version}; migrates to {current} on next use"
         ), []
     return Check("store", "ok", f"schema version {version}, {len(members)} participants"), members
+
+
+def check_config(path: Path) -> tuple[Config, Check]:
+    try:
+        config = load_config(path)
+    except CallboardError as error:
+        return Config(), Check("config", "fail", f"{error}; using the defaults")
+    detail = str(path) if path.exists() else f"{path} absent; using the defaults"
+    return config, Check("config", "ok", detail)
 
 
 def check_bellhop(bell: Caller) -> Check:
@@ -152,11 +161,18 @@ def _pruned_line(pruned: Pruned | None) -> str:
 
 def doctor(args: argparse.Namespace, runtime: Runtime) -> int:
     env = runtime.env
-    bell = caller_for(load_config(config_path(env)).ping_command, env, runtime.deadline)
+    config, config_check = check_config(config_path(env))
+    bell = caller_for(config.ping_command, env, runtime.deadline)
     store_check, members = check_store(store_path(env))
     bellhop_check = check_bellhop(bell)
     routes_check, unresolved = check_routes(members, lambda: live_routes(bell))
-    checks = [check_data_dir(data_dir(env), os.getuid()), store_check, bellhop_check, routes_check]
+    checks = [
+        check_data_dir(data_dir(env), os.getuid()),
+        store_check,
+        bellhop_check,
+        routes_check,
+        config_check,
+    ]
     fields: dict[str, object] = {
         "checks": [
             {"name": check.name, "status": check.status, "detail": check.detail} for check in checks

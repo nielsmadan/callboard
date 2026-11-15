@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status": "error",
+  "exit_code": 3,
+  "error": {
+    "code": "caller_unknown",
+    "message": "CODEX_THREAD_ID=not-live is not a live session hooklinesinker lists",
+    "candidates": []
+  }
+}

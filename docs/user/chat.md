@@ -26,6 +26,9 @@ sent cb_ec5a4723715e to @nanna
 
 ## Reading (in nanna's session)
 
+While bellhop has not yet confirmed the pings (here it reported them `pending`), they count as
+unread:
+
 ```
 $ callboard inbox
 @enki  3 unread
@@ -47,6 +50,23 @@ sent cb_7722d25347bb to @enki
 - A `<ref>` is `@handle` (your direct conversation with them), `group:<name>`, `mail:<id>` or a
   message id `cb_…`.
 - `--reply-to` must name a message in the same conversation.
+
+A short message that bellhop confirmed it delivered in full is already read, so `inbox` and `read`
+skip it; `history` shows it again. With bellhop answering `confirmed`:
+
+```
+$ callboard dm nanna "short note: CI is green again"
+sent cb_fef715dc6300 to @nanna
+```
+
+In nanna's session:
+
+```
+$ callboard inbox
+no unread messages
+$ callboard history @enki --limit 1
+cb_fef715dc6300  2026-11-14T00:29:43Z  enki: short note: CI is green again
+```
 
 `history` shows the latest messages whether read or not (`--limit`, default 20):
 
@@ -142,8 +162,9 @@ which they do only for messages younger than 15 minutes. After that it stays unr
 
 ## When bellhop is missing or fails
 
-The message is still stored and the command exits 0. Each recipient that could not be rung adds
-a warning:
+The message is still stored and the command exits 0. Each routed recipient that could not be rung
+adds a warning (here nanna is an agent with a route), and `doctor --reping`, run once bellhop is
+back on `PATH`, rings again what was missed:
 
 ```
 $ callboard --as enki dm nanna "are you there?"
@@ -154,8 +175,10 @@ ok    data_dir  ~/.local/share/callboard
 ok    store     schema version 1, 2 participants
 ok    bellhop   ~/.local/bin/bellhop
 ok    routes    2 routes resolve
+ok    config    ~/.config/callboard/config.toml absent; using the defaults
 re-rang 1 receipts
 ```
 
 Without bellhop, callboard cannot ask which session you are in, so a command without `--as`
-exits 1 with `bellhop not found on PATH`. Each command gives bellhop 20 seconds in total.
+exits 1 with `bellhop not found on PATH`. Each command gives bellhop 20 seconds in total;
+copying attachments and storing the message do not count against it.

@@ -1,9 +1,10 @@
 import argparse
 import sqlite3
+import time
 from collections.abc import Sequence
 from dataclasses import replace
 
-from callboard.bellhop_client import Caller
+from callboard.bellhop_client import Caller, resumed
 from callboard.cli.context import as_caller, attach, bellhop, body_of, ring, settings
 from callboard.cli.presentation import diagnostic, emit
 from callboard.cli.rendering import receipt_json
@@ -69,6 +70,18 @@ def _after_commit(
             code="store_unavailable",
             extra={"message": _sent_json(stored, files, [])},
         ) from error
+    except Exception as error:
+        raise CallboardError(
+            f"stored {stored.id}, then failed: {type(error).__name__}: {error}",
+            code="internal_error",
+            extra={"message": _sent_json(stored, files, [])},
+        ) from error
+    except KeyboardInterrupt as error:
+        raise CallboardError(
+            f"stored {stored.id}, then interrupted",
+            code="interrupted",
+            extra={"message": _sent_json(stored, files, [])},
+        ) from error
 
 
 def _report(
@@ -92,13 +105,16 @@ def dm(args: argparse.Namespace, runtime: Runtime) -> int:
     config = settings(runtime)
     bell = bellhop(runtime, config)
     with as_caller(args, runtime, bell) as (conn, caller):
+        paused = time.monotonic()
         if recipient == caller.handle:
             raise CallboardError("cannot send a direct message to yourself", code="usage")
         require_participants(conn, [recipient])
         draft = _draft("", caller.handle, body, args.reply_to, runtime)
         files = attach(args.attach, runtime, config)
         stored = send_direct(conn, draft, recipient, files, rings=not args.no_ping, now=args.now)
-        warnings, receipts = _after_commit(conn, stored, files, bell, runtime.clock())
+        warnings, receipts = _after_commit(
+            conn, stored, files, resumed(bell, paused), runtime.clock()
+        )
     return _report(args, stored, files, receipts, warnings, f"sent {stored.id} to @{recipient}")
 
 
@@ -108,11 +124,14 @@ def _group_send(args: argparse.Namespace, runtime: Runtime) -> int:
     config = settings(runtime)
     bell = bellhop(runtime, config)
     with as_caller(args, runtime, bell) as (conn, caller):
+        paused = time.monotonic()
         require_member(conn, f"group:{name}", caller.handle)
         draft = _draft(f"group:{name}", caller.handle, body, args.reply_to, runtime)
         files = attach(args.attach, runtime, config)
         stored, tagged = send_group(conn, draft, files, now=args.now)
-        warnings, receipts = _after_commit(conn, stored, files, bell, runtime.clock())
+        warnings, receipts = _after_commit(
+            conn, stored, files, resumed(bell, paused), runtime.clock()
+        )
     mentions = f" (mentions {', '.join(f'@{handle}' for handle in tagged)})" if tagged else ""
     line = f"sent {stored.id} to {ref_of(stored.conversation_id, caller.handle)}{mentions}"
     return _report(args, stored, files, receipts, warnings, line)
@@ -168,13 +187,16 @@ def _mail_send(args: argparse.Namespace, runtime: Runtime) -> int:
     config = settings(runtime)
     bell = bellhop(runtime, config)
     with as_caller(args, runtime, bell) as (conn, caller):
+        paused = time.monotonic()
         draft = _draft("", caller.handle, body, None, runtime)
         draft = replace(draft, conversation_id=f"mail:{runtime.token()}")
         roles = addressees(caller.handle, to, cc)
         require_participants(conn, sorted(roles))
         files = attach(args.attach, runtime, config)
         stored = send_mail(conn, draft, subject, roles, files, urgent=args.urgent)
-        warnings, receipts = _after_commit(conn, stored, files, bell, runtime.clock())
+        warnings, receipts = _after_commit(
+            conn, stored, files, resumed(bell, paused), runtime.clock()
+        )
     return _report(
         args, stored, files, receipts, warnings, f"sent {stored.id} to {stored.conversation_id}"
     )
@@ -185,11 +207,14 @@ def _mail_reply(args: argparse.Namespace, runtime: Runtime) -> int:
     config = settings(runtime)
     bell = bellhop(runtime, config)
     with as_caller(args, runtime, bell) as (conn, caller):
+        paused = time.monotonic()
         require_mail_thread(conn, args.message_id, caller.handle)
         draft = _draft("", caller.handle, body, args.message_id, runtime)
         files = attach(args.attach, runtime, config)
         stored = reply_mail(conn, draft, files, urgent=args.urgent)
-        warnings, receipts = _after_commit(conn, stored, files, bell, runtime.clock())
+        warnings, receipts = _after_commit(
+            conn, stored, files, resumed(bell, paused), runtime.clock()
+        )
     return _report(
         args, stored, files, receipts, warnings, f"sent {stored.id} to {stored.conversation_id}"
     )

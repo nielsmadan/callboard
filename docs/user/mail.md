@@ -16,7 +16,8 @@ sent cb_bceb9f8770c7 to mail:3d00fc950c05
 - `--subject` is required. `--to` and `--cc` take comma-separated handles and can be repeated.
 - Every handle must have joined. An unknown handle is exit 3, and nothing is sent.
 - Mail does not interrupt. It is rung at bellhop's `hold` level, which waits in the recipient's
-  `bellhop inbox`, and always as a doorbell.
+  `bellhop inbox`, and always as a doorbell. The ping text carries the subject on one line, cut
+  to 80 characters.
 - `--urgent` rings at `idle` instead, like a direct message. A short urgent mail arrives in full.
 - `--attach PATH` works as in [chat](chat.md#attachments).
 

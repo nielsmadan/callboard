@@ -1,10 +1,13 @@
 import json
 import os
 import shutil
+import signal
 import subprocess
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from contextlib import suppress
+from dataclasses import dataclass, replace
 from typing import cast, get_args
 
 from callboard.codes import HLS_UNAVAILABLE_EXIT, NOT_FOUND_EXIT
@@ -12,6 +15,8 @@ from callboard.errors import CallboardError
 from callboard.models import BellhopMessage, BellhopSession, PingState
 
 STATES: frozenset[str] = frozenset(get_args(PingState.__value__))
+
+POLL_SECONDS = 0.1
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,10 @@ def caller_for(
     return Caller(tuple(command), env, now() + budget)
 
 
+def resumed(caller: Caller, paused_at: float, now: Callable[[], float] = time.monotonic) -> Caller:
+    return replace(caller, deadline=caller.deadline + (now() - paused_at))
+
+
 def executable(command: Sequence[str], env: Mapping[str, str]) -> str:
     first = command[0]
     if "/" in first:
@@ -46,42 +55,90 @@ def executable(command: Sequence[str], env: Mapping[str, str]) -> str:
     return found
 
 
+def _kill_group(process: subprocess.Popen[bytes]) -> None:
+    with suppress(ProcessLookupError, PermissionError):
+        os.killpg(process.pid, signal.SIGKILL)
+    process.wait()
+
+
+def _wait(
+    process: subprocess.Popen[bytes],
+    data: bytes | None,
+    timeout: float,
+    cancel: threading.Event | None,
+) -> bytes:
+    end = time.monotonic() + max(timeout, 0.001)
+    first = data
+    while True:
+        try:
+            stdout, _ = process.communicate(
+                first, timeout=max(min(POLL_SECONDS, end - time.monotonic()), 0.001)
+            )
+            return stdout
+        except subprocess.TimeoutExpired:
+            first = None
+            if time.monotonic() >= end:
+                raise
+            if cancel is not None and cancel.is_set():
+                raise CallboardError("cancelled", code="interrupted") from None
+
+
+def _exchange(
+    argv: Sequence[str],
+    env: Mapping[str, str],
+    timeout: float,
+    stdin: str | None,
+    cancel: threading.Event | None,
+) -> tuple[int, bytes]:
+    with subprocess.Popen(
+        argv,
+        stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=dict(env),
+        start_new_session=True,
+    ) as process:
+        try:
+            stdout = _wait(process, None if stdin is None else stdin.encode(), timeout, cancel)
+        except BaseException:
+            _kill_group(process)
+            raise
+        return process.returncode, stdout
+
+
 def run(
     command: Sequence[str],
     arguments: Sequence[str],
     env: Mapping[str, str],
     timeout: float,
     stdin: str | None = None,
+    cancel: threading.Event | None = None,
 ) -> Reply:
     name = f"bellhop {arguments[0]}"
     found = executable(command, env)
     try:
-        result = subprocess.run(
-            [found, *command[1:], *arguments],
-            input=stdin,
-            stdin=None if stdin is not None else subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            env=dict(env),
-            timeout=max(timeout, 0.001),
-            check=False,
-        )
+        returncode, raw = _exchange([found, *command[1:], *arguments], env, timeout, stdin, cancel)
+        text = raw.decode()
     except subprocess.TimeoutExpired as error:
         raise CallboardError(
             f"{name} timed out after {timeout:.1f}s", code="bellhop_failed"
         ) from error
     except OSError as error:
         raise CallboardError(f"cannot run {name}: {error}", code="bellhop_failed") from error
+    except UnicodeDecodeError as error:
+        raise CallboardError(
+            f"{name} printed output that is not UTF-8", code="bellhop_failed"
+        ) from error
     try:
-        payload = json.loads(result.stdout)
+        payload = json.loads(text)
     except json.JSONDecodeError:
         payload = None
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise CallboardError(
-            f"{name} printed no schema_version 1 JSON (exit {result.returncode})",
+            f"{name} printed no schema_version 1 JSON (exit {returncode})",
             code="bellhop_failed",
         )
-    return Reply(result.returncode, payload)
+    return Reply(returncode, payload)
 
 
 def call(
@@ -89,13 +146,20 @@ def call(
     arguments: Sequence[str],
     stdin: str | None = None,
     now: Callable[[], float] = time.monotonic,
+    cancel: threading.Event | None = None,
 ) -> Reply:
     remaining = caller.deadline - now()
     if remaining <= 0:
         raise CallboardError(
             f"bellhop {arguments[0]}: no time left before the deadline", code="bellhop_failed"
         )
-    return run(caller.command, arguments, caller.env, remaining, stdin)
+    return run(caller.command, arguments, caller.env, remaining, stdin, cancel)
+
+
+def error_code(payload: Mapping[str, object]) -> str | None:
+    error = payload.get("error")
+    code = error.get("code") if isinstance(error, dict) else None
+    return code if isinstance(code, str) else None
 
 
 def error_message(payload: Mapping[str, object]) -> str:
@@ -169,6 +233,7 @@ def parse_message(value: object) -> BellhopMessage | None:
     return BellhopMessage(
         identifier,
         cast("PingState", state),
+        _text(value.get("urgency")),
         _text(value.get("degraded_from")),
         _text(value.get("detail")),
     )

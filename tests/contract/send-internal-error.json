@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "status": "error",
+  "exit_code": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "internal error: OSError: [Errno 5] Input/output error"
+  },
+  "message": {
+    "id": "bh_000000000001",
+    "key": null,
+    "sender": "enki",
+    "urgency": "idle",
+    "state": "sent",
+    "degraded_from": null,
+    "route": "fake",
+    "detail": "fake accepted",
+    "created_at": "2026-11-14T09:00:00Z",
+    "sent_at": "2026-11-14T09:00:00Z",
+    "confirmed_at": null,
+    "target": {
+      "kind": "session",
+      "agent": null,
+      "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
+      "harness": "claude",
+      "title": "alpha"
+    }
+  }
+}

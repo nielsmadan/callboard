@@ -27,8 +27,9 @@ agents = ["claude", "codex", "pi"]
 
 ## Permissions
 
-A harness checks the command the agent types, so the rule is for `callboard`. callboard's own
-`bellhop` subprocesses are not checked; allow `bellhop` too only if agents run it directly.
+A harness checks the command the agent types. callboard's own `bellhop` subprocesses are not
+checked, but agents also run `bellhop` directly, for example `bellhop inbox` to read held mail
+pings, so allow both.
 
 `[shell] default` in loadout's `permissions.toml` is the fallback for OpenCode and Pi only.
 Claude Code's default mode and Codex's approval policy are their own settings, so for those an
@@ -38,6 +39,7 @@ explicit allow entry is what stops the prompt:
 [shell]
 allow = [
   "callboard",
+  "bellhop",
 ]
 ```
 

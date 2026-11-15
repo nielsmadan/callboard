@@ -20,8 +20,9 @@ $ callboard dm nanna "the parser change is in; can you rebase on main?"
 sent cb_6874cb72357e to @nanna
 ```
 
-In nanna's session the message arrives as a prompt, `callboard cb_… dm from enki: …`, and
-`callboard inbox` and `callboard read @enki` show it there.
+In nanna's session the message arrives as a prompt, `callboard cb_… dm from enki: …`. Once bellhop
+confirms that delivery, the message counts as read; `callboard history @enki` shows it again.
+Longer messages arrive as a pointer to `callboard read <id>`, and stay unread until then.
 
 ## Commands
 

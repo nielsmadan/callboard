@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "agent": {
+    "agent": "enki",
+    "harness": "claude",
+    "configured": false,
+    "binding": {
+      "state": "live",
+      "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
+      "cause": "bind",
+      "detail": null
+    }
+  }
+}

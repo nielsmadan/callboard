@@ -94,5 +94,6 @@ class Attachment:
 class BellhopMessage:
     id: str
     state: PingState
+    urgency: str | None
     degraded_from: str | None
     detail: str | None

@@ -1,10 +1,11 @@
 {
   "schema_version": 1,
   "status": "ok",
+  "warnings": [],
   "session": {
-    "session_id": "7c1d0b5e-4a2f-4c8e-9d3b-1f6a2e8c0d47",
+    "session_id": "2e20ffff-0000-4000-8000-000000000002",
     "harness": "codex",
-    "title": "reviewer",
+    "title": "beta",
     "agent": null
   }
 }

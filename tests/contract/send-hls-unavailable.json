@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "status": "error",
+  "exit_code": 5,
+  "error": {
+    "code": "hls_unavailable",
+    "message": "hooklinesinker sessions --json exited 1: ledger locked"
+  }
+}

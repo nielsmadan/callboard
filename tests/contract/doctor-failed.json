@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "status": "error",
+  "exit_code": 1,
+  "error": {
+    "code": "doctor_failed",
+    "message": "1 doctor checks failed: runtime directory"
+  },
+  "checks": [
+    {
+      "name": "hooklinesinker",
+      "ok": true,
+      "detail": "4 live sessions"
+    },
+    {
+      "name": "state directory",
+      "ok": true,
+      "detail": "<tmp>/state-home/bellhop"
+    },
+    {
+      "name": "runtime directory",
+      "ok": false,
+      "detail": "runtime directory <runtime> has mode 0755; it must be 0700"
+    },
+    {
+      "name": "store",
+      "ok": true,
+      "detail": "schema version 2 of 2"
+    },
+    {
+      "name": "pending work",
+      "ok": true,
+      "detail": "0 messages wait for the drainer"
+    }
+  ],
+  "pruned": null
+}

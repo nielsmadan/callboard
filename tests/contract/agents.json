@@ -10,25 +10,25 @@
       "binding": {
         "state": "live",
         "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
-        "cause": null,
+        "cause": "bind",
         "detail": null
       }
     },
     {
-      "agent": "utu",
+      "agent": "nanna",
       "harness": "codex",
       "configured": true,
       "binding": null
     },
     {
-      "agent": "ninsun",
-      "harness": "pi",
+      "agent": "scribe",
+      "harness": "claude",
       "configured": false,
       "binding": {
-        "state": "failed",
-        "session_id": null,
-        "cause": "launch",
-        "detail": "pi exited with status 1"
+        "state": "live",
+        "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
+        "cause": "bind",
+        "detail": null
       }
     }
   ]

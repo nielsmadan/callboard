@@ -8,7 +8,7 @@ import pytest
 
 from callboard.cli.dispatch import run
 from callboard.cli.doctor import Check, check_data_dir, check_store
-from callboard.paths import data_dir, store_path
+from callboard.paths import config_path, data_dir, store_path
 from callboard.store import join_participant, open_store
 from helpers import FAKES, FakeBellhop, runtime
 
@@ -41,6 +41,7 @@ def test_a_fresh_install_warns_about_the_missing_store_and_passes(
         "store": "warn",
         "bellhop": "ok",
         "routes": "ok",
+        "config": "ok",
     }
     assert payload["unresolved"] == []
     assert not data_dir(os.environ).exists()
@@ -53,10 +54,10 @@ def test_routes_that_no_longer_resolve_are_listed(
     bellhop.replay("agents", "agents.json")
     _seed(
         ("enki", "enki"),
-        ("reviewer", "7c1d0b5e-4a2f-4c8e-9d3b-1f6a2e8c0d47"),
+        ("reviewer", "2e20ffff-0000-4000-8000-000000000002"),
         ("gone", "0b0b0b0b-dead-4c8e-9d3b-1f6a2e8c0d47"),
-        ("sleeper", "utu"),
-        ("failed", "ninsun"),
+        ("sleeper", "nanna"),
+        ("bound", "scribe"),
         ("stranger", "nergal"),
         ("niels", None),
     )
@@ -67,6 +68,7 @@ def test_routes_that_no_longer_resolve_are_listed(
         "store": "ok",
         "bellhop": "ok",
         "routes": "warn",
+        "config": "ok",
     }
     assert payload["unresolved"] == [
         {"handle": "gone", "route": "0b0b0b0b-dead-4c8e-9d3b-1f6a2e8c0d47"},
@@ -88,6 +90,7 @@ def test_all_routes_resolving_passes_in_text(
             "ok    store     schema version 1, 1 participants\n"
             f"ok    bellhop   {FAKES / 'bellhop'}\n"
             "ok    routes    1 routes resolve\n"
+            f"ok    config    {config_path(os.environ)} absent; using the defaults\n"
         ),
         "",
     )
@@ -125,6 +128,7 @@ def test_missing_bellhop_fails_with_the_error_envelope(
         "store": "ok",
         "bellhop": "fail",
         "routes": "warn",
+        "config": "ok",
     }
 
 
@@ -210,3 +214,27 @@ def test_an_unstatable_data_dir_fails_cleanly(tmp_path: Path) -> None:
         )
     finally:
         parent.chmod(0o700)
+
+
+def test_a_broken_config_is_a_failed_check_and_the_rest_still_runs(
+    bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = config_path(os.environ)
+    path.parent.mkdir(parents=True)
+    path.write_text('ping_command = "bellhop"\n')
+    code, payload = _doctor(capsys)
+    assert code == 1
+    assert payload["error"] == {"code": "doctor_failed", "message": "1 check failed: config"}
+    assert _statuses(payload) == {
+        "data_dir": "warn",
+        "store": "warn",
+        "bellhop": "ok",
+        "routes": "ok",
+        "config": "fail",
+    }
+    checks = payload["checks"]
+    assert isinstance(checks, list)
+    assert checks[4]["detail"] == (
+        f"{path}: ping_command must be a non-empty list of strings; got 'bellhop';"
+        " using the defaults"
+    )

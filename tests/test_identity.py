@@ -13,7 +13,7 @@ from callboard.store import join_participant, open_store
 from helpers import FakeBellhop
 
 ENKI_SESSION = "2e2042a9-937c-4e03-ba25-74b5ba14a58f"
-UNNAMED_SESSION = "7c1d0b5e-4a2f-4c8e-9d3b-1f6a2e8c0d47"
+UNNAMED_SESSION = "2e20ffff-0000-4000-8000-000000000002"
 
 
 @pytest.fixture
@@ -58,28 +58,28 @@ def test_invalid_handles_are_usage_errors(handle: str) -> None:
 
 
 def test_whoami_reads_an_agent_bound_session(bellhop: FakeBellhop) -> None:
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     session = whoami(_bell(os.environ))
-    assert session == BellhopSession(ENKI_SESSION, "claude", "callboard", "enki")
+    assert session == BellhopSession(ENKI_SESSION, "claude", "alpha", "enki")
     assert route_of(session) == "enki"
     assert bellhop.calls() == [["whoami", "--json"]]
 
 
 def test_whoami_without_an_agent_routes_by_session_id(bellhop: FakeBellhop) -> None:
-    bellhop.replay("whoami", "whoami-session.json")
+    bellhop.replay("whoami", "whoami-no-agent.json")
     session = whoami(_bell(os.environ))
-    assert session == BellhopSession(UNNAMED_SESSION, "codex", "reviewer", None)
+    assert session == BellhopSession(UNNAMED_SESSION, "codex", "beta", None)
     assert route_of(session) == UNNAMED_SESSION
 
 
 def test_whoami_outside_a_session_is_not_found(bellhop: FakeBellhop) -> None:
-    bellhop.replay("whoami", "whoami-not-found.json")
+    bellhop.replay("whoami", "whoami-caller-unknown.json")
     with pytest.raises(CallboardError) as caught:
         whoami(_bell(os.environ))
     assert _error(caught) == (
         "not_in_session",
         3,
-        "bellhop whoami: not inside a session hls knows",
+        "bellhop whoami: CODEX_THREAD_ID=not-live is not a live session hooklinesinker lists",
     )
 
 
@@ -150,7 +150,7 @@ def test_as_flag_wins_over_env_and_session(
 ) -> None:
     for handle, route in [("ana", None), ("ben", None), ("enki", "enki")]:
         join_participant(conn, handle, "agent", route, "t")
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     monkeypatch.setenv("CALLBOARD_AS", "ben")
     assert resolve_caller(conn, "ana", _bell(os.environ)).handle == "ana"
     assert resolve_caller(conn, None, _bell(os.environ)).handle == "ben"
@@ -163,7 +163,7 @@ def test_session_is_matched_by_agent_name_before_session_id(
     conn: sqlite3.Connection, bellhop: FakeBellhop
 ) -> None:
     join_participant(conn, "by-session", "agent", ENKI_SESSION, "t")
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     assert resolve_caller(conn, None, _bell(os.environ)).handle == "by-session"
     join_participant(conn, "by-agent", "agent", "enki", "t")
     assert resolve_caller(conn, None, _bell(os.environ)).handle == "by-agent"
@@ -188,7 +188,7 @@ def test_an_unknown_explicit_handle_is_not_found(
 def test_an_unjoined_session_is_not_found_with_the_join_hint(
     conn: sqlite3.Connection, bellhop: FakeBellhop
 ) -> None:
-    bellhop.replay("whoami", "whoami-session.json")
+    bellhop.replay("whoami", "whoami-no-agent.json")
     with pytest.raises(CallboardError) as caught:
         resolve_caller(conn, None, _bell(os.environ))
     assert _error(caught) == (
@@ -201,14 +201,14 @@ def test_an_unjoined_session_is_not_found_with_the_join_hint(
 def test_no_session_at_all_is_not_found_with_the_join_hint(
     conn: sqlite3.Connection, bellhop: FakeBellhop
 ) -> None:
-    bellhop.replay("whoami", "whoami-not-found.json")
+    bellhop.replay("whoami", "whoami-caller-unknown.json")
     with pytest.raises(CallboardError) as caught:
         resolve_caller(conn, None, _bell(os.environ))
     assert _error(caught) == (
         "identity_not_found",
         3,
         (
-            "cannot tell who you are; bellhop whoami: not inside a session hls knows;"
+            "cannot tell who you are; bellhop whoami: CODEX_THREAD_ID=not-live is not a live session hooklinesinker lists;"
             " run: callboard join <handle>"
         ),
     )
@@ -221,7 +221,7 @@ def test_two_handles_on_one_route_are_ambiguous(
         "INSERT INTO participants (handle, kind, route, created_at) VALUES (?, 'agent', 'enki', 't')",
         [("one",), ("two",)],
     )
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     with pytest.raises(CallboardError) as caught:
         resolve_caller(conn, None, _bell(os.environ))
     assert _error(caught) == (

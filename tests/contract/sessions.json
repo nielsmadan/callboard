@@ -6,26 +6,50 @@
     {
       "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
       "harness": "claude",
-      "title": "callboard",
-      "cwd": "/work/callboard",
-      "phase": "working",
-      "observed_at": "2026-11-14T09:11:58Z",
+      "title": "alpha",
+      "cwd": "/work/alpha",
+      "phase": "idle",
+      "observed_at": "2026-11-14T09:00:00Z",
       "agent": "enki",
       "reachable": true,
-      "route": "claude-relay",
-      "pending": 0
+      "route": "fake",
+      "pending": 1
     },
     {
-      "session_id": "7c1d0b5e-4a2f-4c8e-9d3b-1f6a2e8c0d47",
+      "session_id": "2e20ffff-0000-4000-8000-000000000002",
       "harness": "codex",
-      "title": "reviewer",
-      "cwd": "/work/bellhop",
+      "title": "beta",
+      "cwd": "/work/beta",
       "phase": "idle",
-      "observed_at": "2026-11-14T09:10:31Z",
+      "observed_at": "2026-11-14T09:00:00Z",
       "agent": null,
       "reachable": false,
       "route": null,
-      "pending": 2
+      "pending": 0
+    },
+    {
+      "session_id": "7f00aa11-0000-4000-8000-000000000003",
+      "harness": "pi",
+      "title": "dup",
+      "cwd": "/work/dup",
+      "phase": "idle",
+      "observed_at": "2026-11-14T09:00:00Z",
+      "agent": null,
+      "reachable": true,
+      "route": "fake",
+      "pending": 0
+    },
+    {
+      "session_id": "7f00bb22-0000-4000-8000-000000000004",
+      "harness": "pi",
+      "title": "dup",
+      "cwd": "/work/dup",
+      "phase": "idle",
+      "observed_at": "2026-11-14T09:00:00Z",
+      "agent": null,
+      "reachable": true,
+      "route": "fake",
+      "pending": 0
     }
   ]
 }

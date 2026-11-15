@@ -114,3 +114,19 @@ def test_an_unexpected_failure_still_prints_one_envelope(
     }
     assert main(["history", "@x"]) == 1
     assert capsys.readouterr() == ("", "callboard: internal error: OverflowError: int too large\n")
+
+
+@pytest.mark.parametrize(
+    ("argv", "flag"),
+    [
+        (["--vers"], "--vers"),
+        (["history", "@x", "--lim", "3"], "--lim"),
+        (["read", "@x", "--pe"], "--pe"),
+        (["doctor", "--js"], "--js"),
+    ],
+)
+def test_abbreviated_flags_are_refused(
+    argv: list[str], flag: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(argv) == 2
+    assert f"unrecognized arguments: {flag}" in capsys.readouterr().err

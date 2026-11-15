@@ -1,11 +1,14 @@
 import argparse
 from collections.abc import Sequence
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from callboard.errors import CallboardError
 
 
 class _Parser(argparse.ArgumentParser):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **{**kwargs, "allow_abbrev": False})
+
     def error(self, message: str) -> NoReturn:
         raise CallboardError(message, code="usage")
 

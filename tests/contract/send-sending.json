@@ -3,23 +3,23 @@
   "status": "ok",
   "warnings": [],
   "message": {
-    "id": "bh_7f3a9c2e41d0",
-    "key": "cb_19ab4c7d2e10:enki",
-    "sender": "nanna",
+    "id": "bh_000000000001",
+    "key": null,
+    "sender": "enki",
     "urgency": "idle",
+    "state": "sending",
     "degraded_from": null,
-    "route": "claude-relay",
+    "route": "fake",
     "detail": null,
-    "created_at": "2026-11-14T09:12:03Z",
+    "created_at": "2026-11-14T09:00:00Z",
     "sent_at": null,
     "confirmed_at": null,
     "target": {
-      "kind": "agent",
-      "agent": "enki",
+      "kind": "session",
+      "agent": null,
       "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
       "harness": "claude",
-      "title": "callboard"
-    },
-    "state": "sending"
+      "title": "alpha"
+    }
   }
 }

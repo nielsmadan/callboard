@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from callboard.bellhop_client import (
     Caller,
     Reply,
     call,
+    error_code,
     error_message,
     parse_message,
     parse_status,
@@ -18,12 +20,16 @@ from callboard.bellhop_client import (
 from callboard.errors import CallboardError
 from callboard.models import BellhopMessage, PingState
 from callboard.store import write
+from callboard.text import shortened
 
 MAX_PARALLEL = 8
 CONFIRM_SECONDS = 5
 REFRESH_WINDOW = timedelta(minutes=15)
-REFUSED_EXITS = frozenset({2, 3, 4})
+ROUTINE_WARNING = "not confirmed within "
+REFUSED_CODES = frozenset({"usage", "target_not_found", "target_ambiguous", "no_route"})
 READ_STATES = frozenset({"confirmed", "read"})
+SUBJECT_LIMIT = 80
+STATE_ORDER = "|pending|sending|sent|confirmed|read|failed|"
 
 
 @dataclass(frozen=True)
@@ -41,14 +47,15 @@ class Rung:
     ring: Ring
     bellhop: BellhopMessage | None
     failed: bool
-    warning: str | None
+    warnings: tuple[str, ...]
 
 
 def label(kind: str, name: str | None, subject: str | None) -> str:
     if kind == "group":
         return f"group {name}"
     if kind == "mail":
-        return f'mail "{subject}"'
+        quoted = shortened(subject or "", SUBJECT_LIMIT).replace('"', '\\"')
+        return f'mail "{quoted}"'
     return "dm"
 
 
@@ -123,34 +130,56 @@ ORDER BY m.seq, r.recipient""",
     ]
 
 
+def _held(ring: Ring, stored: BellhopMessage) -> bool:
+    return stored.urgency == "hold" and ring.level != "hold"
+
+
 def _from_reply(ring: Ring, reply: Reply) -> Rung:
     stored = parse_message(reply.payload.get("message"))
     who = f"ping {ring.recipient} for {ring.message_id}"
+    passed_on = tuple(
+        f"{who}: bellhop send: {item}"
+        for item in warnings_of(reply.payload)
+        if not item.startswith(ROUTINE_WARNING)
+    )
     if reply.payload.get("status") == "ok":
         if stored is None:
-            return Rung(ring, None, False, f"{who}: bellhop send returned no message")
-        degraded = stored.degraded_from
-        note = f"{who}: held by bellhop; no usable route for {degraded}" if degraded else None
-        return Rung(ring, stored, False, note)
-    reason = f"{who}: bellhop send: {error_message(reply.payload)}"
+            return Rung(ring, None, False, (f"{who}: bellhop send returned no message",))
+        held = (
+            (f"{who}: held by bellhop; no usable route for {ring.level}",)
+            if _held(ring, stored)
+            else ()
+        )
+        failed = (
+            (f"{who}: bellhop send: {stored.detail or 'failed'}",)
+            if stored.state == "failed"
+            else ()
+        )
+        return Rung(ring, stored, stored.state == "failed", (*held, *failed, *passed_on))
+    reason = (f"{who}: bellhop send: {error_message(reply.payload)}", *passed_on)
     if stored is not None:
         return Rung(ring, stored, stored.state == "failed", reason)
-    return Rung(ring, None, reply.exit_code in REFUSED_EXITS, reason)
+    return Rung(ring, None, error_code(reply.payload) in REFUSED_CODES, reason)
 
 
-def ring_one(ring: Ring, caller: Caller) -> Rung:
+def ring_one(ring: Ring, caller: Caller, cancel: threading.Event | None = None) -> Rung:
     try:
-        reply = call(caller, send_arguments(ring), stdin=ring.text)
+        reply = call(caller, send_arguments(ring), stdin=ring.text, cancel=cancel)
     except CallboardError as error:
-        return Rung(ring, None, False, f"ping {ring.recipient} for {ring.message_id}: {error}")
+        return Rung(ring, None, False, (f"ping {ring.recipient} for {ring.message_id}: {error}",))
     return _from_reply(ring, reply)
 
 
 def ring_all(rings: Sequence[Ring], caller: Caller) -> list[Rung]:
     if not rings:
         return []
+    cancel = threading.Event()
     with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL, len(rings))) as pool:
-        return list(pool.map(lambda ring: ring_one(ring, caller), rings))
+        try:
+            return list(pool.map(lambda ring: ring_one(ring, caller, cancel), rings))
+        except BaseException:
+            cancel.set()
+            raise
 
 
 def _state(rung: Rung) -> PingState | None:
@@ -161,13 +190,14 @@ def _state(rung: Rung) -> PingState | None:
 
 def record(conn: sqlite3.Connection, rungs: Sequence[Rung], now: str) -> None:
     updates = [
-        (
-            rung.bellhop.id if rung.bellhop else None,
-            _state(rung),
-            now if rung.bellhop and rung.bellhop.state in READ_STATES else None,
-            rung.ring.message_id,
-            rung.ring.recipient,
-        )
+        {
+            "bellhop_id": rung.bellhop.id if rung.bellhop else None,
+            "state": _state(rung),
+            "read_at": now if rung.bellhop and rung.bellhop.state in READ_STATES else None,
+            "message_id": rung.ring.message_id,
+            "recipient": rung.ring.recipient,
+            "order": STATE_ORDER,
+        }
         for rung in rungs
         if _state(rung) is not None
     ]
@@ -175,9 +205,11 @@ def record(conn: sqlite3.Connection, rungs: Sequence[Rung], now: str) -> None:
         return
     with write(conn):
         conn.executemany(
-            "UPDATE receipts SET bellhop_id = coalesce(?, bellhop_id), ping_state = ?,"
-            " read_at = CASE WHEN inline = 1 AND read_at IS NULL THEN ? ELSE read_at END"
-            " WHERE message_id = ? AND recipient = ?",
+            "UPDATE receipts SET bellhop_id = coalesce(:bellhop_id, bellhop_id),"
+            " ping_state = :state,"
+            " read_at = CASE WHEN inline = 1 AND read_at IS NULL THEN :read_at ELSE read_at END"
+            " WHERE message_id = :message_id AND recipient = :recipient"
+            " AND instr(:order, '|' || ping_state || '|') <= instr(:order, '|' || :state || '|')",
             updates,
         )
 
@@ -187,7 +219,8 @@ def ring_messages(
 ) -> tuple[int, list[str]]:
     rungs = ring_all(pending_rings(conn, message_ids), caller)
     record(conn, rungs, now)
-    return len(rungs), [rung.warning for rung in rungs if rung.warning]
+    answered = [rung for rung in rungs if rung.bellhop is not None or rung.failed]
+    return len(answered), [warning for rung in rungs for warning in rung.warnings]
 
 
 def _cutoff(now: str) -> str:

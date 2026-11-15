@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "status": "error",
+  "exit_code": 3,
+  "error": {
+    "code": "target_ambiguous",
+    "message": "'dup' is the title of 2 live sessions; use a longer id",
+    "candidates": [
+      "7f00aa11-0000-4000-8000-000000000003 (pi, dup)",
+      "7f00bb22-0000-4000-8000-000000000004 (pi, dup)"
+    ]
+  }
+}

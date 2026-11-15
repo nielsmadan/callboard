@@ -14,7 +14,7 @@ from callboard.store import open_store
 from helpers import FakeBellhop, runtime
 
 ENKI_SESSION = "2e2042a9-937c-4e03-ba25-74b5ba14a58f"
-UNNAMED_SESSION = "7c1d0b5e-4a2f-4c8e-9d3b-1f6a2e8c0d47"
+UNNAMED_SESSION = "2e20ffff-0000-4000-8000-000000000002"
 
 
 def _callboard(*argv: str) -> int:
@@ -31,7 +31,7 @@ def _rows() -> list[tuple[str, str, str | None, str]]:
 def test_join_routes_to_the_agent_name(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     assert _callboard("join", "enki") == 0
     assert capsys.readouterr() == ("joined as enki (route enki)\n", "")
     assert _rows() == [("enki", "agent", "enki", "2026-11-14T09:00:00Z")]
@@ -40,7 +40,7 @@ def test_join_routes_to_the_agent_name(
 def test_join_without_an_agent_name_routes_to_the_session_id(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    bellhop.replay("whoami", "whoami-session.json")
+    bellhop.replay("whoami", "whoami-no-agent.json")
     assert _callboard("join", "reviewer") == 0
     assert capsys.readouterr().out == f"joined as reviewer (route {UNNAMED_SESSION})\n"
     assert _rows() == [("reviewer", "agent", UNNAMED_SESSION, "2026-11-14T09:00:00Z")]
@@ -49,9 +49,9 @@ def test_join_without_an_agent_name_routes_to_the_session_id(
 def test_join_again_from_another_session_rebinds_and_says_so(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     assert _callboard("join", "enki") == 0
-    bellhop.replay("whoami", "whoami-session.json")
+    bellhop.replay("whoami", "whoami-no-agent.json")
     capsys.readouterr()
     assert _callboard("join", "enki") == 0
     assert capsys.readouterr() == (
@@ -64,7 +64,7 @@ def test_join_again_from_another_session_rebinds_and_says_so(
 def test_join_again_from_the_same_session_is_quiet(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     assert _callboard("join", "enki") == 0
     assert _callboard("join", "enki") == 0
     assert capsys.readouterr() == ("joined as enki (route enki)\n" * 2, "")
@@ -89,10 +89,10 @@ def test_join_with_an_invalid_handle_is_a_usage_error(
 def test_join_outside_a_session_fails_and_stores_nothing(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    bellhop.replay("whoami", "whoami-not-found.json")
+    bellhop.replay("whoami", "whoami-caller-unknown.json")
     assert _callboard("join", "enki") == 3
     assert capsys.readouterr().err == (
-        "callboard: bellhop whoami: not inside a session hls knows;"
+        "callboard: bellhop whoami: CODEX_THREAD_ID=not-live is not a live session hooklinesinker lists;"
         " to join without a session, run: callboard join <handle> --human\n"
     )
     assert not store_path(os.environ).exists()
@@ -127,7 +127,7 @@ GOLDEN = Path(__file__).resolve().parent / "golden"
 def test_who_json_matches_the_golden(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     assert _callboard("join", "enki") == 0
     assert _callboard("join", "niels", "--human") == 0
     capsys.readouterr()
@@ -141,7 +141,7 @@ def test_who_json_matches_the_golden(
 def test_who_marks_the_caller_in_text(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     assert _callboard("join", "enki") == 0
     assert _callboard("join", "niels", "--human") == 0
     capsys.readouterr()
@@ -172,7 +172,7 @@ def test_who_warns_when_the_session_is_joined_twice(
             "INSERT INTO participants (handle, kind, route, created_at) VALUES (?, 'agent', 'enki', 't')",
             [("one",), ("two",)],
         )
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     assert _callboard("who", "--json") == 0
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
@@ -207,7 +207,7 @@ def test_who_warns_when_hls_is_down(
 def test_joining_a_second_handle_moves_the_route_to_it(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    bellhop.replay("whoami", "whoami-agent.json")
+    bellhop.replay("whoami", "whoami.json")
     assert _callboard("join", "enkii") == 0
     capsys.readouterr()
     assert _callboard("join", "enki") == 0

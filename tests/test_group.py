@@ -141,6 +141,8 @@ def test_group_text_comes_from_stdin_and_reply_to_stays_in_the_group(
         ("@nannaX", ()),
         ("@nAnna", ()),
         ("@nannaé", ()),
+        ("@nanna-é", ()),
+        ("@nanna-X", ()),
         ("@nanna\u2019s turn", ("nanna",)),
         ("@nanna@utu", ()),
         ("@re-view-", ("re-view-",)),

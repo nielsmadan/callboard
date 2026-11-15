@@ -20,5 +20,5 @@ For builders:
   callboard is built on.
 - [Loadout snippets](handoff/loadout-snippets.md): installing the skill and allowing the commands
   through loadout; proposed, not applied.
-- [Provisional bellhop fixtures](../tests/contract/PROVISIONAL.md): the bellhop JSON the tests
-  replay until bellhop's own goldens exist.
+- [bellhop fixtures](../tests/contract/SOURCE.md): bellhop's golden JSON that the tests replay,
+  and the few cases derived from it.

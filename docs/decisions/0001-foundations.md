@@ -54,7 +54,8 @@ Engineering:
   version lives in `meta.schema_version`; numbered forward migrations re-check the version inside
   their own transaction, and a newer schema is refused. Rows are ordered by an autoincrement `seq`.
 - callboard runs the `bellhop` on `PATH`, or the argv in `ping_command`, for every bellhop call,
-  and gives bellhop 20 s in total per command, identity lookup included. Up to 8 recipients ring
+  and gives bellhop 20 s in total per command, identity lookup included and local work (copying
+  attachments, storing the message) excluded. Up to 8 recipients ring
   at once.
 - `--json` prints exactly one object with `schema_version`; errors carry `status: "error"`,
   `exit_code` and `error: {code, message}`. Keys are snake_case, times ISO-8601 UTC.

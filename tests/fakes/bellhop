@@ -16,6 +16,10 @@ if log:
         handle.write(json.dumps({"argv": arguments, "stdin": stdin}) + "\n")
 
 time.sleep(float(os.environ.get("FAKE_BELLHOP_SLEEP", "0")))
+raw_hex = os.environ.get("FAKE_BELLHOP_RAW_HEX")
+if raw_hex is not None:
+    sys.stdout.buffer.write(bytes.fromhex(raw_hex))
+    sys.exit(int(os.environ.get("FAKE_BELLHOP_EXIT", "0")))
 raw = os.environ.get("FAKE_BELLHOP_RAW")
 if raw is not None:
     print(raw)

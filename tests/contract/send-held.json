@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "message": {
+    "id": "bh_000000000001",
+    "key": null,
+    "sender": "enki",
+    "urgency": "hold",
+    "state": "pending",
+    "degraded_from": "idle",
+    "route": "none",
+    "detail": null,
+    "created_at": "2026-11-14T09:00:00Z",
+    "sent_at": null,
+    "confirmed_at": null,
+    "target": {
+      "kind": "session",
+      "agent": null,
+      "session_id": "2e20ffff-0000-4000-8000-000000000002",
+      "harness": "codex",
+      "title": "beta"
+    }
+  }
+}

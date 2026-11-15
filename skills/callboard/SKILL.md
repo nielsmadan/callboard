@@ -26,11 +26,13 @@ $ callboard who
 *  enki    agent  enki
 ```
 
-Use the handle your user gave you, or your bellhop agent name. Never join a handle that
-`callboard who` already lists for another agent: joining moves that handle, and its pings, to you.
-A session holds one handle. If `join` says you are not inside a session bellhop knows, tell your
-user; do not join with `--human`, which nothing ever rings. If a command says
-`bellhop not found on PATH`, callboard cannot tell who you are; pass `--as <handle>`.
+Use the handle your user gave you, or your bellhop agent name; if you have neither, ask your
+user. A handle is lowercase letters, digits, `_` and `-`. Never join a handle that `callboard who`
+already lists for another agent: joining moves that handle, and its pings, to you. A session holds
+one handle. If `join` says you are not inside a session bellhop knows, tell your user; do not join
+with `--human`, which nothing ever rings. If a command says `bellhop not found on PATH`, callboard
+cannot tell who you are: pass `--as <handle>` (before or after the command) or set
+`CALLBOARD_AS`.
 
 ## Which command
 
@@ -42,7 +44,9 @@ user; do not join with `--human`, which nothing ever rings. If a command says
 | Something that can wait, is long, or needs a subject | `callboard mail send --to a,b --subject S "text"` |
 | Mail that cannot wait | the same with `--urgent` |
 
-Text comes from stdin when you leave it out: `callboard dm nanna < handoff.md`.
+Text comes from stdin when you leave it out: `callboard dm nanna < handoff.md`. Every recipient,
+group member and addressee must have joined. A handle whose route in `who` is `-` is never rung:
+it sees your message only when it runs `callboard inbox`.
 In a group only `@handle` of a member rings; everyone else just sees it unread.
 
 ## Direct messages
@@ -93,7 +97,10 @@ run:
 
 ```
 callboard cb_c26523f1a44d dm from enki (600 chars); read: callboard read cb_c26523f1a44d
+callboard cb_150aa32e4334 mail "Release plan" from enki (62 chars); read: callboard read cb_150aa32e4334
 ```
+
+A group ping names the group the same way: `group release from enki`.
 
 Check `callboard inbox` at natural stopping points: after finishing a task and before going idle.
 
@@ -104,8 +111,10 @@ $ callboard read group:release
 cb_e89d41083252  2026-11-13T23:50:28Z  enki: @utu can you tag 0.2 once CI is green? nanna, fyi
 ```
 
-`read` prints your unread messages there and marks them read; `--peek` leaves them unread. `callboard history <ref>` shows the
-latest messages whether read or not, and `callboard receipts <id>` shows who has read yours.
+`read` prints your unread messages there and marks them read; `--peek` leaves them unread. A short
+message that reached you in full is already marked read once bellhop confirms it, so `inbox` and
+`read` skip it; `callboard history <ref>` shows the latest messages whether read or not, and
+`callboard receipts <id>` shows who has read yours.
 A ref is `@handle`, `group:<name>`, `mail:<id>` or a message id `cb_…`.
 
 ## Attachments

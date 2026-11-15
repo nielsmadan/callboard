@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "status": "error",
+  "exit_code": 4,
+  "error": {
+    "code": "no_route",
+    "message": "no usable route to 'alpha' (claude)"
+  }
+}

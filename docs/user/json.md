@@ -117,7 +117,8 @@ by handle.
     {"name": "data_dir", "status": "ok", "detail": "/home/u/.local/share/callboard"},
     {"name": "store", "status": "ok", "detail": "schema version 1, 3 participants"},
     {"name": "bellhop", "status": "ok", "detail": "/usr/local/bin/bellhop"},
-    {"name": "routes", "status": "warn", "detail": "1 of 2 routes no longer resolve"}
+    {"name": "routes", "status": "warn", "detail": "1 of 2 routes no longer resolve"},
+    {"name": "config", "status": "ok", "detail": "/home/u/.config/callboard/config.toml"}
   ],
   "unresolved": [{"handle": "gone", "route": "0b0b0b0b-dead-4c8e-9d3b-1f6a2e8c0d47"}]
 }
@@ -126,13 +127,15 @@ by handle.
 With `--prune`, the object also has
 `"pruned": {"blobs": 1, "blob_bytes": 2304, "temp_files": 0, "wal_truncated": true}`, or
 `"pruned": null` when the store check is not `ok` and nothing was pruned. With `--reping`, it has
-`"repinged": 2`, the number of receipts rung again (those not `none`, still `pending` and without
-a `bellhop_id`), or `null` when the store check is not `ok`; ringing problems go to `warnings`.
+`"repinged": 2`, the number of receipts bellhop accepted or refused when rung again (out of those
+not `none`, still `pending` and without a `bellhop_id`), or `null` when the store check is not `ok`; ringing problems go to `warnings`.
 
-Each check's `status` is `ok`, `warn` or `fail`. When any check fails, the object is the error
+Each check's `status` is `ok`, `warn` or `fail`. A `config` file that cannot be read or has an
+invalid value is a failed check; the other checks then run with the defaults. When any check fails, the object is the error
 envelope (`doctor_failed`, exit 1) with `checks` and `unresolved` still present. A route resolves
 when it is a live session id or agent name in `bellhop sessions --json`, or an agent listed in
-`bellhop agents --json` (a stopped agent bellhop can wake).
+`bellhop agents --json`. A configured agent that is not running counts as resolved, but until
+bellhop can launch agents a ping to it is refused (`no_route`) and the receipt is `failed`.
 
 ## `callboard dm|group send|mail send|mail reply … --json`
 
@@ -155,13 +158,22 @@ route always gets `none`. The receipts are read back after ringing: `bellhop_id`
 whole message (idle or now, 500 characters or less, no attachments). An inline ping bellhop
 `confirmed` already has `read_at` set.
 
-Ringing never fails the command. Each recipient bellhop could not ring adds one string to
-`warnings` (also printed to stderr), such as `"ping nanna for cb_000000000001: bellhop send timed
+Ringing never fails the command. Problems with a recipient's ping add strings to `warnings`
+(also printed to stderr), such as `"ping nanna for cb_000000000001: bellhop send timed
 out after 20.0s"`. A receipt stays `pending` without a `bellhop_id` when bellhop was missing, slow,
 printed malformed output or reported hls unavailable (`doctor --reping` rings it again), and
-becomes `failed` when bellhop refused the target (exit 2, 3 or 4) or rejected the push. A ping
-bellhop stored as `hold` because the target had no usable route adds a warning ending in
-`held by bellhop; no usable route for idle`. The text output stays one line,
+becomes `failed` when bellhop refused the ping (`usage`, `target_not_found`, `target_ambiguous`
+or `no_route`) or rejected the push. Other bellhop errors, such as `invalid_config` or
+`store_error`, leave it `pending` for `doctor --reping`. When bellhop had already stored the ping
+before failing (`interrupted`, `internal_error`), the receipt gets its `bellhop_id` and state and
+is refreshed rather than rung again; a stored ping bellhop reports `failed` (for example
+`expired`) is `failed` with a warning. A direct or group ping bellhop returns with urgency `hold`,
+because the target had no usable route, adds a warning ending in
+`held by bellhop; no usable route for idle`; a `--now` ping bellhop delivered as `idle` is not
+held and adds nothing. Warnings bellhop itself attached to a send, such as
+`cannot confirm: no transcript to read for this session`, are passed on as
+`ping <recipient> for <id>: bellhop send: <warning>`; the routine `not confirmed within 5s` is
+left out, since the receipt already says `sent` and a later refresh upgrades it. The text output stays one line,
 `sent <id> to <ref>`.
 
 ## `callboard inbox --json`

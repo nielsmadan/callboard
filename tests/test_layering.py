@@ -9,7 +9,7 @@ PACKAGE_ROOT = SOURCE_ROOT / "callboard"
 PACKAGE = "callboard"
 
 LAYERS: tuple[tuple[str, ...], ...] = (
-    ("__init__", "codes", "mentions"),
+    ("__init__", "codes", "mentions", "text"),
     ("errors", "models"),
     ("paths", "jsonout", "refs", "config", "bellhop_client"),
     ("store",),
@@ -29,6 +29,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "__init__": frozenset(),
     "codes": frozenset(),
     "mentions": frozenset(),
+    "text": frozenset(),
     "errors": frozenset({"codes"}),
     "models": frozenset(),
     "jsonout": frozenset({"errors"}),
@@ -45,7 +46,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
         {"attachments", "conversations", "errors", "mentions", "models", "receipts", "store"}
     ),
     "mail": frozenset({"conversations", "errors", "messages", "models", "receipts", "store"}),
-    "ping": frozenset({"bellhop_client", "errors", "models", "store"}),
+    "ping": frozenset({"bellhop_client", "errors", "models", "store", "text"}),
     "cli": frozenset(
         {
             "attachments",
@@ -64,6 +65,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
             "receipts",
             "refs",
             "store",
+            "text",
         }
     ),
     "__main__": frozenset({"cli"}),
