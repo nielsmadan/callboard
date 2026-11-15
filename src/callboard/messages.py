@@ -3,8 +3,8 @@ import sqlite3
 from callboard.conversations import ensure_dm, members, require_member, require_participants
 from callboard.errors import CallboardError
 from callboard.mentions import mentioned
-from callboard.models import Message, Participant
-from callboard.receipts import insert_receipts, mark_read, ping_level
+from callboard.models import Message
+from callboard.receipts import insert_receipts, mark_read, ping_for, ring_level
 from callboard.store import participant, write
 
 
@@ -32,7 +32,7 @@ def require_message(conn: sqlite3.Connection, message_id: str, caller: str) -> M
     return found
 
 
-def _check_parent(conn: sqlite3.Connection, parent_id: str | None, conversation_id: str) -> None:
+def check_parent(conn: sqlite3.Connection, parent_id: str | None, conversation_id: str) -> None:
     if parent_id is None:
         return
     parent = message(conn, parent_id)
@@ -45,7 +45,7 @@ def _check_parent(conn: sqlite3.Connection, parent_id: str | None, conversation_
         )
 
 
-def _insert(conn: sqlite3.Connection, draft: Message) -> None:
+def insert_message(conn: sqlite3.Connection, draft: Message) -> None:
     conn.execute(
         "INSERT INTO messages (id, conversation_id, sender, body, parent_id, created_at)"
         " VALUES (?, ?, ?, ?, ?, ?)",
@@ -69,16 +69,18 @@ def send_direct(
         stored = Message(
             draft.id, conversation_id, draft.sender, draft.body, draft.parent_id, draft.created_at
         )
-        _check_parent(conn, stored.parent_id, conversation_id)
-        _insert(conn, stored)
-        target = participant(conn, recipient)
-        route = target.route if target else None
-        insert_receipts(conn, stored.id, {recipient: ping_level(rings=rings, now=now, route=route)})
+        check_parent(conn, stored.parent_id, conversation_id)
+        insert_message(conn, stored)
+        level = ring_level(now=now) if rings else "none"
+        insert_receipts(
+            conn, stored.id, {recipient: ping_for(level, route_of_handle(conn, recipient))}
+        )
     return stored
 
 
-def _route(member: Participant | None) -> str | None:
-    return member.route if member else None
+def route_of_handle(conn: sqlite3.Connection, handle: str) -> str | None:
+    found = participant(conn, handle)
+    return found.route if found else None
 
 
 def send_group(
@@ -86,10 +88,10 @@ def send_group(
 ) -> tuple[Message, tuple[str, ...]]:
     with write(conn):
         require_member(conn, draft.conversation_id, draft.sender)
-        _check_parent(conn, draft.parent_id, draft.conversation_id)
+        check_parent(conn, draft.parent_id, draft.conversation_id)
         handles = members(conn, draft.conversation_id)
         tagged = mentioned(draft.body, handles, draft.sender)
-        _insert(conn, draft)
+        insert_message(conn, draft)
         conn.executemany(
             "INSERT INTO mentions (message_id, handle) VALUES (?, ?)",
             [(draft.id, handle) for handle in tagged],
@@ -98,8 +100,9 @@ def send_group(
             conn,
             draft.id,
             {
-                handle: ping_level(
-                    rings=handle in tagged, now=now, route=_route(participant(conn, handle))
+                handle: ping_for(
+                    ring_level(now=now) if handle in tagged else "none",
+                    route_of_handle(conn, handle),
                 )
                 for handle in handles
                 if handle != draft.sender

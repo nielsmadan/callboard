@@ -44,6 +44,7 @@ def inbox_json(entry: InboxEntry, caller: str) -> dict[str, object]:
         **conversation_json(entry.conversation, caller),
         "unread": entry.unread,
         "mentions": entry.mentions,
+        "sender": entry.sender,
     }
 
 
@@ -51,6 +52,25 @@ def inbox_line(entry: InboxEntry, caller: str, width: int) -> str:
     mentions = entry.mentions
     tail = f", {mentions} mention{'s' if mentions > 1 else ''}" if mentions else ""
     return f"{ref_of(entry.conversation.id, caller):<{width}}  {entry.unread} unread{tail}"
+
+
+def mail_line(entry: InboxEntry, width: int) -> str:
+    subject = entry.conversation.subject or ""
+    return (
+        f"{entry.conversation.id:<{width}}  {entry.unread} unread  from {entry.sender}: {subject}"
+    )
+
+
+def inbox_lines(entries: Sequence[InboxEntry], caller: str) -> list[str]:
+    chats = [entry for entry in entries if entry.conversation.kind != "mail"]
+    mail = [entry for entry in entries if entry.conversation.kind == "mail"]
+    if not entries:
+        return ["no unread messages"]
+    chat_width = max((len(ref_of(entry.conversation.id, caller)) for entry in chats), default=0)
+    mail_width = max((len(entry.conversation.id) for entry in mail), default=0)
+    chat_lines = [inbox_line(entry, caller, chat_width) for entry in chats]
+    mail_lines = ["mail:", *(f"  {mail_line(entry, mail_width)}" for entry in mail)] if mail else []
+    return [*chat_lines, *([""] if chat_lines and mail_lines else []), *mail_lines]
 
 
 def receipt_json(receipt: Receipt) -> dict[str, object]:

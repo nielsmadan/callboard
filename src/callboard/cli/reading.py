@@ -4,7 +4,7 @@ from callboard.cli.context import as_caller
 from callboard.cli.presentation import emit
 from callboard.cli.rendering import (
     inbox_json,
-    inbox_line,
+    inbox_lines,
     message_json,
     messages_lines,
     receipt_json,
@@ -24,10 +24,8 @@ def inbox(args: argparse.Namespace, runtime: Runtime) -> int:
     with as_caller(args, runtime) as (conn, caller):
         entries = inbox_of(conn, caller.handle)
     me = caller.handle
-    width = max((len(ref_of(entry.conversation.id, me)) for entry in entries), default=0)
-    lines = [inbox_line(entry, me, width) for entry in entries] or ["no unread messages"]
     payload = ok_payload({"conversations": [inbox_json(entry, me) for entry in entries]})
-    emit(payload, lines, json_mode=args.json)
+    emit(payload, inbox_lines(entries, me), json_mode=args.json)
     return 0
 
 

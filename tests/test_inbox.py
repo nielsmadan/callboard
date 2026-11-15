@@ -48,6 +48,7 @@ def test_the_sender_has_nothing_unread_from_themselves(cb: Callboard) -> None:
             "project": "bellhop",
             "unread": 1,
             "mentions": 0,
+            "sender": "niels",
         }
     ]
 

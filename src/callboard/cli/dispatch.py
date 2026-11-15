@@ -3,7 +3,7 @@ import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from importlib.metadata import version
 
-from callboard.cli.chat import dm, group
+from callboard.cli.chat import dm, group, mail
 from callboard.cli.commands import join, who
 from callboard.cli.doctor import doctor
 from callboard.cli.parsing import json_requested, parse
@@ -21,6 +21,7 @@ COMMANDS: Mapping[str, Command] = {
     "history": history,
     "inbox": inbox,
     "join": join,
+    "mail": mail,
     "read": read,
     "receipts": receipts,
     "who": who,

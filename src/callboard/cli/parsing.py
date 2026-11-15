@@ -81,6 +81,23 @@ def _add_chat(commands: "argparse._SubParsersAction[_Parser]") -> None:
     send.add_argument("text", nargs="?", metavar="TEXT", help="message text; stdin when omitted")
     send.add_argument("--now", action="store_true", help="ring mentioned members as an interrupt")
     send.add_argument("--reply-to", metavar="MESSAGE", help="reply to a message in this group")
+    _add_mail(commands)
+
+
+def _add_mail(commands: "argparse._SubParsersAction[_Parser]") -> None:
+    mail = commands.add_parser("mail", parents=[_as_flag()], help="send and reply to mail")
+    actions = mail.add_subparsers(dest="action", metavar="ACTION", parser_class=_Parser)
+    actions.required = True
+    send = actions.add_parser("send", parents=[_as_flag()], help="start a mail thread")
+    send.add_argument("--to", type=_handles, action="extend", required=True, metavar="A,B")
+    send.add_argument("--cc", type=_handles, action="extend", default=[], metavar="C,D")
+    send.add_argument("--subject", required=True, metavar="S")
+    send.add_argument("text", nargs="?", metavar="TEXT", help="message text; stdin when omitted")
+    send.add_argument("--urgent", action="store_true", help="ring recipients instead of holding")
+    reply = actions.add_parser("reply", parents=[_as_flag()], help="reply to all in a thread")
+    reply.add_argument("message_id", metavar="MESSAGE")
+    reply.add_argument("text", nargs="?", metavar="TEXT", help="message text; stdin when omitted")
+    reply.add_argument("--urgent", action="store_true", help="ring recipients instead of holding")
 
 
 def _add_reading(commands: "argparse._SubParsersAction[_Parser]") -> None:

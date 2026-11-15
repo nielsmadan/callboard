@@ -120,13 +120,17 @@ running currently shows as unresolved.
 ```json
 {"schema_version": 1, "status": "ok", "warnings": [], "conversations": [
   {"ref": "group:ops", "id": "group:ops", "kind": "group", "name": "ops", "subject": null,
-   "project": "bellhop", "unread": 2, "mentions": 1}
+   "project": "bellhop", "unread": 2, "mentions": 1, "sender": "niels"},
+  {"ref": "mail:3fa9c1d2e4b5", "id": "mail:3fa9c1d2e4b5", "kind": "mail", "name": null,
+   "subject": "Release plan", "project": null, "unread": 1, "mentions": 0, "sender": "enki"}
 ]}
 ```
 
-There is one entry per conversation with unread messages for the caller. Conversations with
-unread mentions come first, then the most recent activity first. `mentions` counts unread
-messages that mention the caller.
+There is one entry per conversation the caller is a member of and has unread messages in.
+Conversations with unread mentions come first, then the most recent activity first. `mentions`
+counts unread messages that mention the caller. `sender` is the sender of the newest unread
+message. Mail threads have `kind` `mail` and their `subject`; the text output lists them under a
+separate `mail:` heading.
 
 ## `callboard read <ref> --json`
 

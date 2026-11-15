@@ -15,6 +15,8 @@ callboard dm <to> [TEXT] [--now] [--no-ping] [--reply-to MESSAGE]
 callboard group create <name> --members a,b,c [--project P]
 callboard group add|remove <name> <handle>
 callboard group send <name> [TEXT] [--now] [--reply-to MESSAGE]
+callboard mail send --to a[,b] [--cc c[,d]] --subject S [TEXT] [--urgent]
+callboard mail reply <message-id> [TEXT] [--urgent]   # to everyone in the thread but you
 callboard inbox [--json]                          # unread counts, mentions first
 callboard read <ref> [--peek] [--json]            # print unread and mark it read
 callboard history <ref> [--limit N] [--json]
@@ -25,7 +27,8 @@ callboard --version
 
 `<ref>` is `@handle` (your direct chat with them), `group:<name>`, `mail:<id>` or a message id
 `cb_…`. TEXT is read from stdin when omitted. A direct message rings the recipient; in a group
-only an `@mention` of a member rings. Ringing itself arrives in a later version: for now each
+only an `@mention` of a member rings. Mail is held for the recipients' `bellhop inbox` unless
+`--urgent`. Ringing itself arrives in a later version: for now each
 receipt records the ping it will get.
 
 A session holds one handle. Joining as another handle from the same session moves the session's

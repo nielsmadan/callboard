@@ -16,6 +16,7 @@ LAYERS: tuple[tuple[str, ...], ...] = (
     ("identity", "conversations"),
     ("receipts",),
     ("messages",),
+    ("mail",),
     ("cli",),
     ("__main__",),
 )
@@ -38,10 +39,12 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "conversations": frozenset({"errors", "models", "refs", "store"}),
     "receipts": frozenset({"conversations", "models"}),
     "messages": frozenset({"conversations", "errors", "mentions", "models", "receipts", "store"}),
+    "mail": frozenset({"conversations", "errors", "messages", "models", "receipts", "store"}),
     "cli": frozenset(
         {
             "codes",
             "conversations",
+            "mail",
             "errors",
             "identity",
             "jsonout",

@@ -77,3 +77,4 @@ class InboxEntry:
     conversation: Conversation
     unread: int
     mentions: int
+    sender: str

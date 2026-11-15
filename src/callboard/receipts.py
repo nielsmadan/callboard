@@ -5,10 +5,12 @@ from callboard.conversations import conversation_of
 from callboard.models import InboxEntry, Ping, Receipt
 
 
-def ping_level(*, rings: bool, now: bool, route: str | None) -> Ping:
-    if not rings or route is None:
-        return "none"
+def ring_level(*, now: bool) -> Ping:
     return "now" if now else "idle"
+
+
+def ping_for(level: Ping, route: str | None) -> Ping:
+    return "none" if route is None else level
 
 
 def insert_receipts(conn: sqlite3.Connection, message_id: str, pings: Mapping[str, Ping]) -> None:
@@ -53,7 +55,8 @@ def inbox(conn: sqlite3.Connection, recipient: str) -> list[InboxEntry]:
     rows = conn.execute(
         """SELECT c.*, count(*) AS unread,
   sum(EXISTS (SELECT 1 FROM mentions x WHERE x.message_id = m.id AND x.handle = :me)) AS mentioned,
-  max(m.seq) AS latest
+  max(m.seq) AS latest,
+  m.sender AS latest_sender
 FROM receipts r
 JOIN messages m ON m.id = r.message_id
 JOIN conversations c ON c.id = m.conversation_id
@@ -63,4 +66,7 @@ GROUP BY c.id
 ORDER BY mentioned > 0 DESC, latest DESC""",
         {"me": recipient},
     )
-    return [InboxEntry(conversation_of(row), row["unread"], row["mentioned"]) for row in rows]
+    return [
+        InboxEntry(conversation_of(row), row["unread"], row["mentioned"], row["latest_sender"])
+        for row in rows
+    ]

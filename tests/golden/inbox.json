@@ -11,7 +11,8 @@
       "subject": null,
       "project": "bellhop",
       "unread": 2,
-      "mentions": 1
+      "mentions": 1,
+      "sender": "niels"
     },
     {
       "ref": "@enki",
@@ -21,7 +22,8 @@
       "subject": null,
       "project": null,
       "unread": 1,
-      "mentions": 0
+      "mentions": 0,
+      "sender": "enki"
     }
   ]
 }
