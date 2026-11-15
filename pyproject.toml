@@ -44,8 +44,11 @@ fail_under = 80
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-config --strict-markers -m 'not smoke'"
-markers = ["smoke: live test against real agents; run only through just smoke"]
+addopts = "--strict-config --strict-markers -m 'not smoke and not packaging'"
+markers = [
+    "smoke: live test against real agents; run only through just smoke",
+    "packaging: builds the wheel and sdist; run through just check-package",
+]
 filterwarnings = ["error"]
 
 [tool.ruff]
@@ -82,5 +85,8 @@ strict = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/callboard"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"skills" = "callboard/_skills"
+
 [tool.hatch.build.targets.sdist]
-include = ["src/callboard", "tests", "README.md", "LICENSE", "pyproject.toml"]
+include = ["src/callboard", "skills", "docs", "tests", "README.md", "LICENSE", "pyproject.toml"]

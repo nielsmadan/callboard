@@ -17,7 +17,9 @@ just coverage   # the suite with branch coverage; fails under 80%
 just smoke      # live tests against real agents (marked smoke, deselected by default)
 ```
 
-`just check-static` is the lint, cycle and type pass without the suite. `just setup` installs
+`just check-static` is the lint, cycle and type pass without the suite. `just check-package`
+builds the wheel and sdist and checks that the skill is bundled; it is deselected from the normal
+suite. `just setup` installs
 project dependencies and repository hooks; it does not install `callboard` globally.
 
 ## Architecture
@@ -36,6 +38,11 @@ Only SQL runs inside a write transaction: never a subprocess, a push or a file c
 - New behavior gets observable tests in the matching `tests/test_<module>.py` file.
 - Tests never call a real `bellhop` or agent: `tests/fakes/bellhop` replays the JSON fixtures in
   `tests/contract/`.
+- The agent skill lives in `skills/callboard/SKILL.md` and is bundled into the wheel as
+  `callboard/_skills/`. Keep it under 150 lines.
+- Every `$ callboard …` line in `README.md`, `docs/user/` and the skill must parse
+  (`tests/test_docs.py`). Example output in the docs is pasted from real runs, never written by
+  hand; a run against a temporary `HOME` and `tests/fakes/bellhop` is enough.
 - New code normally needs no comments or docstrings. Use names and small typed functions.
 - `--json` prints exactly one object on stdout. Diagnostics go to stderr prefixed `callboard: `.
 - Error messages in git style: lowercase, no trailing period, clauses joined with `;`.

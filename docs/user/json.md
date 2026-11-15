@@ -43,7 +43,7 @@ in this envelope too, whenever `--json` appears on the command line.
 
 - `bellhop_failed`: bellhop is missing from `PATH`, timed out, printed no `schema_version` 1
   JSON, or reported an error that is neither "not in a session" nor "hls unavailable".
-- `not_in_session`: `bellhop whoami` found no session for the caller (`callboard join` fails
+- `not_in_session`: `bellhop whoami` found no session for the caller (`join` fails
   with it).
 - `identity_not_found`: the caller's session has not joined. The message ends with
   `run: callboard join <handle>`.
@@ -87,7 +87,7 @@ A message:
 ```
 
 `attachments` lists the files sent with the message, in the order given; `path` is the stored
-copy, which `callboard attachment get` also prints. `conversation_id` is `dm:<a>:<b>` (handles sorted), `group:<name>` or `mail:<id>`.
+copy, which `attachment get` also prints. `conversation_id` is `dm:<a>:<b>` (handles sorted), `group:<name>` or `mail:<id>`.
 
 A conversation, as listed by `inbox`:
 

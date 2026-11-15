@@ -30,6 +30,8 @@ jobs:
         run: uv sync --locked --all-groups
       - name: Static analysis and tests
         run: just check
+      - name: Distribution tests
+        run: just check-package
 
   coverage-and-build:
     runs-on: ubuntu-latest

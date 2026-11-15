@@ -15,6 +15,9 @@ coverage:
 smoke:
     @uv run --locked pytest -m smoke -q
 
+check-package:
+    @uv run --locked pytest -m packaging -q
+
 lint:
     @uv run --locked ruff check
 
