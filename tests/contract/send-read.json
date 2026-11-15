@@ -4,8 +4,8 @@
   "warnings": [],
   "message": {
     "id": "bh_000000000001",
-    "key": null,
-    "sender": "enki",
+    "key": "k-read",
+    "sender": "x",
     "urgency": "hold",
     "state": "read",
     "degraded_from": null,

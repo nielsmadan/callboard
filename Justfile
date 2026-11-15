@@ -1,3 +1,6 @@
+bellhop_commit := "f551bdf55a60301e33e745a871498aaf8a3c68ce"
+bellhop_repo := env("BELLHOP_REPO", justfile_directory() / "../../bellhop/dev1")
+
 [private]
 default:
     @just --list
@@ -13,7 +16,23 @@ coverage:
     @uv run --locked pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml -q
 
 smoke:
-    @uv run --locked pytest -m smoke -q
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo="{{bellhop_repo}}"
+    commit="{{bellhop_commit}}"
+    if ! git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "just smoke: no bellhop git repo at $repo; set BELLHOP_REPO" >&2
+        exit 1
+    fi
+    if ! git -C "$repo" cat-file -e "$commit^{commit}" 2>/dev/null; then
+        echo "just smoke: bellhop commit $commit not found in $repo" >&2
+        exit 1
+    fi
+    archive=".cache/bellhop-$commit"
+    rm -rf "$archive"
+    mkdir -p "$archive"
+    git -C "$repo" archive "$commit" | tar -x -C "$archive"
+    uv run --locked --with "./$archive" python -m pytest -m smoke -q
 
 check-package:
     @uv run --locked pytest -m packaging -q

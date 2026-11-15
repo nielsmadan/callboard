@@ -861,3 +861,74 @@ def test_an_error_after_bellhop_stored_the_ping_records_its_message(
     assert result.json()["warnings"] == [f"ping nanna for cb_000000000001: bellhop send: {warning}"]
     assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", state)
     assert cb("doctor", "--reping", "--json").json().get("repinged") == 0
+
+
+def test_a_ping_that_wakes_its_recipient_is_pending_and_unread(
+    cb: Callboard, bellhop: FakeBellhop
+) -> None:
+    bellhop.replay("send", "send-wake.json")
+    result = cb("--as", "enki", "dm", "nanna", "hello", "--json")
+    assert (result.code, result.err, result.json()["warnings"]) == (0, "", [])
+    assert _receipt("cb_000000000001", "nanna")[:3] == ("bh_000000000001", "pending", None)
+
+
+def test_that_confirm_does_not_wait_for_a_wake_stays_quiet(
+    cb: Callboard, bellhop: FakeBellhop
+) -> None:
+    bellhop.replay("send", "send-wake-confirm.json")
+    result = cb("--as", "enki", "dm", "nanna", "hello", "--json")
+    assert (result.code, result.err, result.json()["warnings"]) == (0, "", [])
+    assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", "pending")
+
+
+def test_a_woken_inline_ping_is_unread_while_sent_and_read_once_confirmed(
+    cb: Callboard, bellhop: FakeBellhop
+) -> None:
+    bellhop.replay("send", "send-wake-confirm.json")
+    assert cb("--as", "enki", "dm", "nanna", "hello").code == 0
+    bellhop.replay("status", "status-woken.json")
+    assert cb("--as", "nanna", "inbox", "--json").json()["conversations"][0]["unread"] == 1
+    assert _receipt("cb_000000000001", "nanna") == ("bh_000000000001", "sent", None, 1)
+    bellhop.replay("status", "status-confirmed.json")
+    receipts = cb("--as", "enki", "receipts", "cb_000000000001", "--json").json()["receipts"]
+    assert (receipts[0]["ping_state"], receipts[0]["read_at"]) == (
+        "confirmed",
+        "2026-11-14T09:00:00Z",
+    )
+    assert cb("--as", "nanna", "inbox", "--json").json()["conversations"] == []
+
+
+def test_a_wake_that_cannot_start_keeps_the_ping_pending_and_passes_the_warning_on(
+    cb: Callboard, bellhop: FakeBellhop
+) -> None:
+    bellhop.replay("send", "send-wake-cannot-launch.json")
+    result = cb("--as", "enki", "dm", "nanna", "hello", "--json")
+    assert (result.code, result.json()["warnings"]) == (
+        0,
+        [
+            (
+                "ping nanna for cb_000000000001: bellhop send: cannot launch 'enki':"
+                " its cwd /no/such/dir is not a directory; the message waits"
+            )
+        ],
+    )
+    assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", "pending")
+
+
+def test_a_wake_after_a_failed_start_records_the_ping_failed_with_its_detail(
+    cb: Callboard, bellhop: FakeBellhop
+) -> None:
+    bellhop.replay("send", "send-wake-failed.json")
+    result = cb("--as", "enki", "dm", "nanna", "hello", "--json")
+    assert (result.code, result.json()["warnings"]) == (
+        0,
+        [
+            (
+                "ping nanna for cb_000000000001: bellhop send: cannot wake 'enki': start failed:"
+                " stopped at the trust-folder screen; attach with: tmux -S <tmux-socket> attach"
+                " -t =enki; run `bellhop launch enki` to retry"
+            )
+        ],
+    )
+    assert _receipt("cb_000000000001", "nanna")[:2] == ("bh_000000000001", "failed")
+    assert cb("doctor", "--reping", "--json").json().get("repinged") == 0

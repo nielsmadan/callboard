@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "status": "error",
+  "exit_code": 1,
+  "error": {
+    "code": "launch_failed",
+    "message": "cannot launch 'enki': tmux new-session failed: fake: server refused"
+  },
+  "message": {
+    "id": "bh_000000000001",
+    "key": null,
+    "sender": "unknown",
+    "urgency": "idle",
+    "state": "failed",
+    "degraded_from": null,
+    "route": "launch",
+    "detail": "start failed: tmux new-session failed: fake: server refused",
+    "created_at": "2026-11-14T09:00:00Z",
+    "sent_at": null,
+    "confirmed_at": null,
+    "target": {
+      "kind": "agent",
+      "agent": "enki",
+      "session_id": null,
+      "harness": "claude",
+      "title": null
+    }
+  }
+}

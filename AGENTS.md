@@ -14,7 +14,7 @@ the [documentation map](docs/overview.md) links the rest.
 ```sh
 just check      # ruff lint and format check, pylint cycle detection, strict mypy, pytest
 just coverage   # the suite with branch coverage; fails under 80%
-just smoke      # live tests against real agents (marked smoke, deselected by default)
+just smoke      # live tests against real agents from a bellhop archive (docs/tests/smoke.md)
 ```
 
 `just check-static` is the lint, cycle and type pass without the suite. `just check-package`

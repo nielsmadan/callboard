@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "integration": {
+    "harness": "pi",
+    "file": "<packaged>",
+    "install_dir": "/opt/pi-agent/extensions",
+    "lines": [
+      "bellhop's Pi extension listens on <runtime_dir>/pi-<pid>.sock and delivers into the session.",
+      "packaged file: <packaged>",
+      "install: bellhop integration export pi --to /opt/pi-agent/extensions",
+      "Pi loads every *.ts in that directory at start; run /reload in a running Pi.",
+      "or load it for one run: pi -e <exported dir>/bellhop.ts",
+      "hooklinesinker 1.5.1 lists Pi only when it runs through an executable named pi (ADR 0002)."
+    ]
+  }
+}

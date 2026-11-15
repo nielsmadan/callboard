@@ -1,14 +1,18 @@
 # Where these fixtures come from
 
 `tests/fakes/bellhop` replays these files. They are bellhop's own contract, copied from
-`bellhop/tests/golden/` at bellhop commit **3036bd3** with
-`git -C <bellhop> show 3036bd3:tests/golden/<file>`, unchanged:
+`bellhop/tests/golden/` at bellhop commit **f551bdf** with
+`git -C <bellhop> archive f551bdf tests/golden`, unchanged:
 
 `agents.json`, `bind.json`, `bind-conflict.json`, `doctor-failed.json`, `inbox.json`,
-`send-confirmed.json`, `send-degraded.json`, `send-hls-unavailable.json`, `send-no-route.json`,
-`send-pending.json`, `send-push-rejected.json`, `send-sent.json`, `send-target-ambiguous.json`,
-`send-target-not-found.json`, `send-usage.json`, `sessions.json`, `status.json`, `whoami.json`,
-`whoami-caller-unknown.json`.
+`integration-export.json`, `integration-show.json`, `integration-show-claude.json`,
+`launch-failed.json`, `launch-live.json`, `launch-started.json`,
+`send-confirmed.json`, `send-degraded.json`, `send-held.json`, `send-hls-unavailable.json`,
+`send-no-route.json`, `send-pending.json`, `send-push-rejected.json`, `send-read.json`,
+`send-sending.json`, `send-sent.json`, `send-target-ambiguous.json`, `send-target-not-found.json`,
+`send-usage.json`, `send-wake.json`, `send-wake-cannot-launch.json`, `send-wake-confirm.json`,
+`send-wake-failed.json`,
+`sessions.json`, `status.json`, `whoami.json`, `whoami-caller-unknown.json`.
 
 bellhop's `docs/user/json.md` at that commit documents every object and error code.
 
@@ -20,15 +24,13 @@ fields named here changed, and nothing else:
 | File | Derived from | Changed |
 |---|---|---|
 | `whoami-no-agent.json` | `whoami.json` | `session`: the `beta` session from `sessions.json` (`2e20ffff-…`, `codex`, `beta`), `agent: null` |
-| `send-sending.json` | `send-sent.json` | `state: "sending"`, `detail` and `sent_at` null |
-| `send-read.json` | `send-sent.json` | `urgency: "hold"`, `state: "read"`, `route: "none"`, `detail` and `sent_at` null |
 | `send-replayed.json` | `send-sent.json` | `key: "cb_000000000002:utu"` (a send for a key bellhop already holds returns that message) |
-| `send-held.json` | `send-pending.json` | `urgency: "hold"`, `degraded_from: "idle"` (what `--or-hold` returns when the target has no usable route) |
 | `send-unconfirmed.json` | `send-sent.json` | `warnings: ["cannot confirm: no transcript to read for this session"]` (bellhop's documented `--confirm` warning) |
 | `send-expired.json` | `send-sent.json` | `state: "failed"`, `detail: "expired"`, `sent_at` null (a `--key` replay of an expired message; bellhop answers `ok`) |
 | `send-not-confirmed.json` | `send-sent.json` | `warnings: ["not confirmed within 5s"]` (bellhop's other documented `--confirm` warning) |
 | `send-interrupted.json` | `send-push-rejected.json` | `exit_code: 130`, `error: {code: "interrupted", …}`, message `state: "sending"`, `detail` null (Ctrl-C after the store) |
 | `send-internal-error.json` | `send-push-rejected.json` | `error: {code: "internal_error", …}`, message `state: "sent"`, `detail: "fake accepted"`, `sent_at` set (a failure after the push) |
+| `status-woken.json` | `launch-live.json` | its `message` (`sent`, route `launch`, detail `started with this prompt`) as the only entry of `messages`, no warnings |
 | `status-confirmed.json` | `send-confirmed.json` | its `message` as the only entry of `messages`, no warnings |
 | `status-pending.json` | `send-pending.json` | its `message` as the only entry of `messages`, no warnings |
 

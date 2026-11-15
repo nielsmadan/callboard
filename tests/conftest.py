@@ -1,6 +1,7 @@
 import itertools
 import os
 import sys
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,8 @@ import pytest
 from callboard.cli.dispatch import run
 from callboard.models import Runtime
 from helpers import CLOCK, FAKES, Callboard, FakeBellhop, Result
+
+collect_ignore_glob = [] if find_spec("bellhop") else ["smoke/*"]
 
 
 @pytest.fixture(autouse=True)

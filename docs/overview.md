@@ -20,5 +20,6 @@ For builders:
   callboard is built on.
 - [Loadout snippets](handoff/loadout-snippets.md): installing the skill and allowing the commands
   through loadout; proposed, not applied.
+- [Live smoke](tests/smoke.md): the end-to-end run against real agents, and its record.
 - [bellhop fixtures](../tests/contract/SOURCE.md): bellhop's golden JSON that the tests replay,
   and the few cases derived from it.

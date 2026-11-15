@@ -25,7 +25,10 @@ from callboard.text import shortened
 MAX_PARALLEL = 8
 CONFIRM_SECONDS = 5
 REFRESH_WINDOW = timedelta(minutes=15)
-ROUTINE_WARNING = "not confirmed within "
+ROUTINE_WARNINGS = (
+    "not confirmed within ",
+    "--confirm does not wait for a message that starts its agent",
+)
 REFUSED_CODES = frozenset({"usage", "target_not_found", "target_ambiguous", "no_route"})
 READ_STATES = frozenset({"confirmed", "read"})
 SUBJECT_LIMIT = 80
@@ -140,7 +143,7 @@ def _from_reply(ring: Ring, reply: Reply) -> Rung:
     passed_on = tuple(
         f"{who}: bellhop send: {item}"
         for item in warnings_of(reply.payload)
-        if not item.startswith(ROUTINE_WARNING)
+        if not item.startswith(ROUTINE_WARNINGS)
     )
     if reply.payload.get("status") == "ok":
         if stored is None:

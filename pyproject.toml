@@ -83,6 +83,10 @@ python_version = "3.13"
 files = ["src", "tests"]
 strict = true
 
+[[tool.mypy.overrides]]
+module = ["bellhop", "bellhop.*"]
+ignore_missing_imports = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/callboard"]
 

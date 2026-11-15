@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "agent": {
+    "agent": "enki",
+    "harness": "claude",
+    "configured": true,
+    "binding": {
+      "state": "starting",
+      "session_id": "<session-id>",
+      "cause": "ci failed",
+      "detail": null
+    }
+  },
+  "message": null
+}

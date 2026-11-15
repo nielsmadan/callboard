@@ -19,7 +19,18 @@ from callboard.errors import CallboardError
 
 CONTRACT = Path(__file__).resolve().parent
 FIXTURES = sorted(path.name for path in CONTRACT.glob("*.json"))
-UNUSED = {"bind.json", "bind-conflict.json", "doctor-failed.json", "inbox.json"}
+UNUSED = {
+    "bind.json",
+    "bind-conflict.json",
+    "doctor-failed.json",
+    "inbox.json",
+    "integration-export.json",
+    "integration-show.json",
+    "integration-show-claude.json",
+    "launch-failed.json",
+    "launch-live.json",
+    "launch-started.json",
+}
 SEND_ERRORS = {
     "send-hls-unavailable.json": ("hls_unavailable", 5),
     "send-no-route.json": ("no_route", 4),
@@ -51,7 +62,12 @@ def test_every_stored_send_carries_a_message(name: str) -> None:
     assert message is not None
     assert message.id == "bh_000000000001"
     if payload["status"] == "error":
-        assert error_code(payload) in {"push_rejected", "interrupted", "internal_error"}
+        assert error_code(payload) in {
+            "push_rejected",
+            "interrupted",
+            "internal_error",
+            "launch_failed",
+        }
 
 
 @pytest.mark.parametrize(("name", "expected"), sorted(SEND_ERRORS.items()))
@@ -66,6 +82,23 @@ def test_the_unconfirmed_send_passes_its_warning() -> None:
     assert warnings_of(_load("send-unconfirmed.json")) == [
         "cannot confirm: no transcript to read for this session"
     ]
+
+
+def test_a_wake_is_pending_until_the_start_or_carries_why_it_waits_or_failed() -> None:
+    woke = parse_message(_load("send-wake.json")["message"])
+    waits = _load("send-wake-cannot-launch.json")
+    failed = _load("send-wake-failed.json")
+    stored = parse_message(failed["message"])
+    assert woke is not None
+    assert woke.state == "pending"
+    assert (parse_message(waits["message"]), warnings_of(waits)) == (
+        woke,
+        ["cannot launch 'enki': its cwd /no/such/dir is not a directory; the message waits"],
+    )
+    assert stored is not None
+    assert (error_code(failed), failed["exit_code"], stored.state) == ("launch_failed", 1, "failed")
+    assert stored.detail is not None
+    assert stored.detail.startswith("start failed: stopped at the trust-folder screen")
 
 
 def test_whoami_results_parse_or_map_to_their_error() -> None:

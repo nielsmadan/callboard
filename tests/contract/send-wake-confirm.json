@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [
+    "--confirm does not wait for a message that starts its agent"
+  ],
+  "message": {
+    "id": "bh_000000000001",
+    "key": null,
+    "sender": "x",
+    "urgency": "idle",
+    "state": "pending",
+    "degraded_from": null,
+    "route": "launch",
+    "detail": null,
+    "created_at": "2026-11-14T09:00:00Z",
+    "sent_at": null,
+    "confirmed_at": null,
+    "target": {
+      "kind": "agent",
+      "agent": "enki",
+      "session_id": null,
+      "harness": "claude",
+      "title": null
+    }
+  }
+}

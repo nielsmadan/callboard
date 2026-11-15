@@ -158,7 +158,8 @@ callboard cb_c26523f1a44d dm from enki (600 chars); read: callboard read cb_c265
 A short message counts as read once bellhop confirms it reached the session: at once when
 `bellhop send` already reports it confirmed, otherwise when `inbox` or `receipts` refresh it,
 which they do only for messages younger than 15 minutes. After that it stays unread until you
-`read` it.
+`read` it. A short message that woke a stopped agent counts as read the same way, once bellhop
+finds it in the new session's transcript.
 
 ## When bellhop is missing or fails
 

@@ -134,8 +134,13 @@ Each check's `status` is `ok`, `warn` or `fail`. A `config` file that cannot be 
 invalid value is a failed check; the other checks then run with the defaults. When any check fails, the object is the error
 envelope (`doctor_failed`, exit 1) with `checks` and `unresolved` still present. A route resolves
 when it is a live session id or agent name in `bellhop sessions --json`, or an agent listed in
-`bellhop agents --json`. A configured agent that is not running counts as resolved, but until
-bellhop can launch agents a ping to it is refused (`no_route`) and the receipt is `failed`.
+`bellhop agents --json`. A configured agent that is not running counts as resolved: an `idle`
+or `now` ping asks bellhop to start it (`--wake`), with the ping as its first prompt. The receipt
+is `pending` until the agent is up, `sent` once it is, and `confirmed` when bellhop finds the
+ping in the new session's transcript; an inline ping that started its recipient is then read.
+When bellhop cannot start the agent, the receipt stays `pending` and bellhop's warning is passed
+on; when the agent's last start failed, bellhop answers `launch_failed` and the receipt is
+`failed`.
 
 ## `callboard dm|group send|mail send|mail reply … --json`
 
@@ -163,7 +168,7 @@ Ringing never fails the command. Problems with a recipient's ping add strings to
 out after 20.0s"`. A receipt stays `pending` without a `bellhop_id` when bellhop was missing, slow,
 printed malformed output or reported hls unavailable (`doctor --reping` rings it again), and
 becomes `failed` when bellhop refused the ping (`usage`, `target_not_found`, `target_ambiguous`
-or `no_route`) or rejected the push. Other bellhop errors, such as `invalid_config` or
+or `no_route`), rejected the push, or answered `launch_failed`. Other bellhop errors, such as `invalid_config` or
 `store_error`, leave it `pending` for `doctor --reping`. When bellhop had already stored the ping
 before failing (`interrupted`, `internal_error`), the receipt gets its `bellhop_id` and state and
 is refreshed rather than rung again; a stored ping bellhop reports `failed` (for example
@@ -172,8 +177,10 @@ because the target had no usable route, adds a warning ending in
 `held by bellhop; no usable route for idle`; a `--now` ping bellhop delivered as `idle` is not
 held and adds nothing. Warnings bellhop itself attached to a send, such as
 `cannot confirm: no transcript to read for this session`, are passed on as
-`ping <recipient> for <id>: bellhop send: <warning>`; the routine `not confirmed within 5s` is
-left out, since the receipt already says `sent` and a later refresh upgrades it. The text output stays one line,
+`ping <recipient> for <id>: bellhop send: <warning>`. Two routine ones are left out:
+`not confirmed within 5s`, since the receipt already says `sent` and a later refresh upgrades it,
+and `--confirm does not wait for a message that starts its agent`, since the receipt of a ping
+that woke its recipient is `pending` until the agent is up. The text output stays one line,
 `sent <id> to <ref>`.
 
 ## `callboard inbox --json`

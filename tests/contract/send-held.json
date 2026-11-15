@@ -17,9 +17,9 @@
     "target": {
       "kind": "session",
       "agent": null,
-      "session_id": "2e20ffff-0000-4000-8000-000000000002",
-      "harness": "codex",
-      "title": "beta"
+      "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
+      "harness": "claude",
+      "title": "alpha"
     }
   }
 }

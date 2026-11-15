@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "integration": {
+    "harness": "claude",
+    "file": "<packaged>",
+    "install_dir": null,
+    "lines": [
+      "bellhop's Claude relay is an MCP server, `bellhop _relay`. It listens on <runtime_dir>/claude-<pid>.sock and delivers through Claude's own messaging socket.",
+      "packaged file: <packaged>",
+      "install for every session: claude mcp add --scope user bellhop -- bellhop _relay",
+      "or for one run: claude --mcp-config <exported dir>/bellhop-mcp.json -- <prompt> (end the --mcp-config list before a prompt)",
+      "bellhop must be on the PATH Claude starts MCP servers with; a running session keeps the relay it started with until it is restarted.",
+      "bellhop never edits Claude's configuration."
+    ]
+  }
+}

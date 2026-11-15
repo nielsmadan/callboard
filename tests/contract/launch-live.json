@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "agent": {
+    "agent": "enki",
+    "harness": "claude",
+    "configured": true,
+    "binding": {
+      "state": "live",
+      "session_id": "<session-id>",
+      "cause": "launch",
+      "detail": null
+    }
+  },
+  "message": {
+    "id": "bh_000000000001",
+    "key": null,
+    "sender": "unknown",
+    "urgency": "idle",
+    "state": "sent",
+    "degraded_from": null,
+    "route": "launch",
+    "detail": "started with this prompt",
+    "created_at": "2026-11-14T09:00:00Z",
+    "sent_at": "2026-11-14T09:00:00Z",
+    "confirmed_at": null,
+    "target": {
+      "kind": "agent",
+      "agent": "enki",
+      "session_id": "<session-id>",
+      "harness": "claude",
+      "title": null
+    }
+  }
+}
