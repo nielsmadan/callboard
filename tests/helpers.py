@@ -24,11 +24,25 @@ class FakeBellhop:
     def replay(self, command: str, fixture: str) -> None:
         self._monkeypatch.setenv(f"FAKE_BELLHOP_{command.upper()}", fixture)
 
-    def calls(self) -> list[list[str]]:
+    def behave(
+        self, *, sleep: float = 0, exit_code: int | None = None, raw: str | None = None
+    ) -> None:
+        self._monkeypatch.setenv("FAKE_BELLHOP_SLEEP", str(sleep))
+        if exit_code is not None:
+            self._monkeypatch.setenv("FAKE_BELLHOP_EXIT", str(exit_code))
+        if raw is not None:
+            self._monkeypatch.setenv("FAKE_BELLHOP_RAW", raw)
+
+    def keyed_ids(self) -> None:
+        self._monkeypatch.setenv("FAKE_BELLHOP_KEYED_IDS", "1")
+
+    def entries(self) -> list[dict[str, Any]]:
         if not self.log.exists():
             return []
-        lines = self.log.read_text(encoding="utf-8").splitlines()
-        return [json.loads(line)["argv"] for line in lines]
+        return [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
+
+    def calls(self) -> list[list[str]]:
+        return [entry["argv"] for entry in self.entries()]
 
 
 CLOCK = "2026-11-14T09:00:00Z"
@@ -51,7 +65,7 @@ class Result(NamedTuple):
 
 
 class Callboard(Protocol):
-    def __call__(self, *argv: str, stdin: str = "") -> Result: ...
+    def __call__(self, *argv: str, stdin: str = "", deadline: float = 20.0) -> Result: ...
 
 
 def seed(*people: tuple[str, str | None]) -> None:

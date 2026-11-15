@@ -7,9 +7,13 @@ from callboard.errors import CallboardError
 DEFAULT_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
 
 
+DEFAULT_PING_COMMAND = ("bellhop",)
+
+
 @dataclass(frozen=True)
 class Config:
     max_attachment_bytes: int = DEFAULT_MAX_ATTACHMENT_BYTES
+    ping_command: tuple[str, ...] = DEFAULT_PING_COMMAND
 
 
 def load_config(path: Path) -> Config:
@@ -25,4 +29,14 @@ def load_config(path: Path) -> Config:
             f"{path}: max_attachment_bytes must be a positive integer; got {limit!r}",
             code="invalid_config",
         )
-    return Config(max_attachment_bytes=limit)
+    command = raw.get("ping_command", list(DEFAULT_PING_COMMAND))
+    if (
+        not isinstance(command, list)
+        or not command
+        or not all(isinstance(part, str) and part for part in command)
+    ):
+        raise CallboardError(
+            f"{path}: ping_command must be a non-empty list of strings; got {command!r}",
+            code="invalid_config",
+        )
+    return Config(max_attachment_bytes=limit, ping_command=tuple(command))

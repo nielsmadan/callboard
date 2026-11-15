@@ -1,9 +1,8 @@
 import argparse
 import os
-import shutil
 import sqlite3
 import stat
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,12 +10,15 @@ from pathlib import Path
 from typing import Literal
 
 from callboard.attachments import Pruned, prune
+from callboard.bellhop_client import Caller, caller_for, executable
 from callboard.cli.presentation import diagnostic, emit
+from callboard.config import load_config
 from callboard.errors import CallboardError
 from callboard.identity import live_routes
 from callboard.jsonout import error_payload, ok_payload
 from callboard.models import Participant, Runtime
-from callboard.paths import attachments_dir, data_dir, store_path
+from callboard.paths import attachments_dir, config_path, data_dir, store_path
+from callboard.ping import ring_messages
 from callboard.store import (
     MIGRATIONS,
     connect_readonly,
@@ -80,10 +82,11 @@ def check_store(path: Path) -> tuple[Check, list[Participant]]:
     return Check("store", "ok", f"schema version {version}, {len(members)} participants"), members
 
 
-def check_bellhop(env: Mapping[str, str]) -> Check:
-    found = shutil.which("bellhop", path=env.get("PATH", os.defpath))
-    if found is None:
-        return Check("bellhop", "fail", "bellhop not found on PATH")
+def check_bellhop(bell: Caller) -> Check:
+    try:
+        found = executable(bell.command, bell.env)
+    except CallboardError as error:
+        return Check("bellhop", "fail", str(error))
     return Check("bellhop", "ok", found)
 
 
@@ -114,6 +117,11 @@ def _epoch(stamp: str) -> float:
     return datetime.fromisoformat(stamp).timestamp()
 
 
+def _reping(runtime: Runtime, bell: Caller) -> tuple[int, list[str]]:
+    with closing(open_store(store_path(runtime.env))) as conn:
+        return ring_messages(conn, None, bell, runtime.clock())
+
+
 def _prune(runtime: Runtime) -> Pruned:
     with closing(open_store(store_path(runtime.env))) as conn:
         return prune(conn, attachments_dir(runtime.env), _epoch(runtime.clock()))
@@ -124,24 +132,30 @@ def _pruned_json(pruned: Pruned) -> dict[str, object]:
         "blobs": pruned.blobs,
         "blob_bytes": pruned.blob_bytes,
         "temp_files": pruned.temp_files,
-        "wal_truncated": True,
+        "wal_truncated": pruned.wal_truncated,
     }
 
 
 def _pruned_line(pruned: Pruned | None) -> str:
     if pruned is None:
         return "prune skipped; the store is not ok"
+    wal = (
+        "truncated the WAL"
+        if pruned.wal_truncated
+        else "could not truncate the WAL while another connection reads it"
+    )
     return (
         f"pruned {pruned.blobs} unreferenced attachment files ({pruned.blob_bytes} bytes)"
-        f" and {pruned.temp_files} temp files; truncated the WAL"
+        f" and {pruned.temp_files} temp files; {wal}"
     )
 
 
 def doctor(args: argparse.Namespace, runtime: Runtime) -> int:
     env = runtime.env
+    bell = caller_for(load_config(config_path(env)).ping_command, env, runtime.deadline)
     store_check, members = check_store(store_path(env))
-    bellhop_check = check_bellhop(env)
-    routes_check, unresolved = check_routes(members, lambda: live_routes(env))
+    bellhop_check = check_bellhop(bell)
+    routes_check, unresolved = check_routes(members, lambda: live_routes(bell))
     checks = [check_data_dir(data_dir(env), os.getuid()), store_check, bellhop_check, routes_check]
     fields: dict[str, object] = {
         "checks": [
@@ -150,19 +164,31 @@ def doctor(args: argparse.Namespace, runtime: Runtime) -> int:
         "unresolved": [{"handle": member.handle, "route": member.route} for member in unresolved],
     }
     lines = _lines(checks, unresolved)
+    warnings: list[str] = []
+    if args.reping:
+        reping = _reping(runtime, bell) if store_check.status == "ok" else None
+        fields["repinged"] = None if reping is None else reping[0]
+        warnings = [] if reping is None else reping[1]
+        lines.append(
+            "reping skipped; the store is not ok"
+            if reping is None
+            else f"re-rang {reping[0]} receipts"
+        )
+        for warning in warnings:
+            diagnostic(warning)
     if args.prune:
         pruned = _prune(runtime) if store_check.status == "ok" else None
         fields["pruned"] = None if pruned is None else _pruned_json(pruned)
         lines.append(_pruned_line(pruned))
     failed = [check.name for check in checks if check.status == "fail"]
     if not failed:
-        emit(ok_payload(fields), lines, json_mode=args.json)
+        emit(ok_payload(fields, warnings), lines, json_mode=args.json)
         return 0
     error = CallboardError(
         f"{len(failed)} check{'s' if len(failed) > 1 else ''} failed: {', '.join(failed)}",
         code="doctor_failed",
     )
-    emit({**error_payload(error), **fields}, lines, json_mode=args.json)
+    emit({**error_payload(error), "warnings": warnings, **fields}, lines, json_mode=args.json)
     if not args.json:
         diagnostic(str(error))
     return error.exit_code

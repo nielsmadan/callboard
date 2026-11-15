@@ -1,4 +1,8 @@
+import pytest
+
 from helpers import Callboard, chat_scenario, load_golden, seed
+
+pytestmark = pytest.mark.usefixtures("ringing")
 
 
 def test_inbox_json_matches_the_golden(cb: Callboard) -> None:

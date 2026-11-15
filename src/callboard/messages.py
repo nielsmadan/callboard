@@ -84,7 +84,10 @@ def send_direct(
         insert_message(conn, stored, attachments)
         level = ring_level(now=now) if rings else "none"
         insert_receipts(
-            conn, stored.id, {recipient: ping_for(level, route_of_handle(conn, recipient))}
+            conn,
+            stored,
+            {recipient: ping_for(level, route_of_handle(conn, recipient))},
+            attached=bool(attachments),
         )
     return stored
 
@@ -113,7 +116,7 @@ def send_group(
         )
         insert_receipts(
             conn,
-            draft.id,
+            draft,
             {
                 handle: ping_for(
                     ring_level(now=now) if handle in tagged else "none",
@@ -122,6 +125,7 @@ def send_group(
                 for handle in handles
                 if handle != draft.sender
             },
+            attached=bool(attachments),
         )
     return draft, tagged
 

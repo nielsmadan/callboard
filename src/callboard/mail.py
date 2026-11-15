@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from callboard.conversations import members, require_member, require_participants
 from callboard.errors import CallboardError
 from callboard.messages import insert_message, message, route_of_handle
-from callboard.models import Attachment, MemberRole, Message, Ping
+from callboard.models import Attachment, Conversation, MemberRole, Message, Ping
 from callboard.receipts import insert_receipts, ping_for
 from callboard.store import write
 
@@ -21,15 +21,16 @@ def addressees(sender: str, to: Sequence[str], cc: Sequence[str]) -> dict[str, M
     return roles
 
 
-def _ring_all(conn: sqlite3.Connection, draft: Message, *, urgent: bool) -> None:
+def _ring_all(conn: sqlite3.Connection, draft: Message, *, urgent: bool, attached: bool) -> None:
     insert_receipts(
         conn,
-        draft.id,
+        draft,
         {
             handle: ping_for(mail_level(urgent=urgent), route_of_handle(conn, handle))
             for handle in members(conn, draft.conversation_id)
             if handle != draft.sender
         },
+        attached=attached,
     )
 
 
@@ -57,8 +58,18 @@ def send_mail(
             ],
         )
         insert_message(conn, draft, attachments)
-        _ring_all(conn, draft, urgent=urgent)
+        _ring_all(conn, draft, urgent=urgent, attached=bool(attachments))
     return draft
+
+
+def require_mail_thread(conn: sqlite3.Connection, parent_id: str, sender: str) -> Conversation:
+    parent = message(conn, parent_id)
+    if parent is None:
+        raise CallboardError(f"no message {parent_id}", code="message_not_found")
+    thread = require_member(conn, parent.conversation_id, sender)
+    if thread.kind != "mail":
+        raise CallboardError(f"{parent_id} is not mail; reply with dm or group send", code="usage")
+    return thread
 
 
 def reply_mail(
@@ -70,15 +81,8 @@ def reply_mail(
 ) -> Message:
     parent_id = draft.parent_id or ""
     with write(conn):
-        parent = message(conn, parent_id)
-        if parent is None:
-            raise CallboardError(f"no message {parent_id}", code="message_not_found")
-        thread = require_member(conn, parent.conversation_id, draft.sender)
-        if thread.kind != "mail":
-            raise CallboardError(
-                f"{parent_id} is not mail; reply with dm or group send", code="usage"
-            )
+        thread = require_mail_thread(conn, parent_id, draft.sender)
         stored = Message(draft.id, thread.id, draft.sender, draft.body, parent_id, draft.created_at)
         insert_message(conn, stored, attachments)
-        _ring_all(conn, stored, urgent=urgent)
+        _ring_all(conn, stored, urgent=urgent, attached=bool(attachments))
     return stored

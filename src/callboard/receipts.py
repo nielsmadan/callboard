@@ -2,7 +2,7 @@ import sqlite3
 from collections.abc import Mapping, Sequence
 
 from callboard.conversations import conversation_of
-from callboard.models import InboxEntry, Ping, Receipt
+from callboard.models import InboxEntry, Message, Ping, Receipt
 
 
 def ring_level(*, now: bool) -> Ping:
@@ -13,11 +13,27 @@ def ping_for(level: Ping, route: str | None) -> Ping:
     return "none" if route is None else level
 
 
-def insert_receipts(conn: sqlite3.Connection, message_id: str, pings: Mapping[str, Ping]) -> None:
+INLINE_LIMIT = 500
+
+
+def is_inline(ping: Ping, body: str, *, attached: bool) -> bool:
+    return ping in {"idle", "now"} and len(body) <= INLINE_LIMIT and not attached
+
+
+def insert_receipts(
+    conn: sqlite3.Connection, message: Message, pings: Mapping[str, Ping], *, attached: bool
+) -> None:
     conn.executemany(
-        "INSERT INTO receipts (message_id, recipient, ping, ping_state) VALUES (?, ?, ?, ?)",
+        "INSERT INTO receipts (message_id, recipient, ping, ping_state, inline)"
+        " VALUES (?, ?, ?, ?, ?)",
         [
-            (message_id, recipient, ping, None if ping == "none" else "pending")
+            (
+                message.id,
+                recipient,
+                ping,
+                None if ping == "none" else "pending",
+                int(is_inline(ping, message.body, attached=attached)),
+            )
             for recipient, ping in sorted(pings.items())
         ],
     )

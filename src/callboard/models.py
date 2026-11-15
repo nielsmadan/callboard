@@ -15,6 +15,7 @@ class Runtime:
     clock: Callable[[], str]
     token: Callable[[], str]
     stdin: Callable[[], str]
+    deadline: float = 20.0
 
 
 @dataclass(frozen=True)
@@ -87,3 +88,11 @@ class Attachment:
     filename: str
     media_type: str
     size: int
+
+
+@dataclass(frozen=True)
+class BellhopMessage:
+    id: str
+    state: PingState
+    degraded_from: str | None
+    detail: str | None

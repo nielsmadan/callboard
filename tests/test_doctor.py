@@ -50,10 +50,14 @@ def test_routes_that_no_longer_resolve_are_listed(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
     bellhop.replay("sessions", "sessions.json")
+    bellhop.replay("agents", "agents.json")
     _seed(
         ("enki", "enki"),
         ("reviewer", "7c1d0b5e-4a2f-4c8e-9d3b-1f6a2e8c0d47"),
         ("gone", "0b0b0b0b-dead-4c8e-9d3b-1f6a2e8c0d47"),
+        ("sleeper", "utu"),
+        ("failed", "ninsun"),
+        ("stranger", "nergal"),
         ("niels", None),
     )
     code, payload = _doctor(capsys)
@@ -65,15 +69,17 @@ def test_routes_that_no_longer_resolve_are_listed(
         "routes": "warn",
     }
     assert payload["unresolved"] == [
-        {"handle": "gone", "route": "0b0b0b0b-dead-4c8e-9d3b-1f6a2e8c0d47"}
+        {"handle": "gone", "route": "0b0b0b0b-dead-4c8e-9d3b-1f6a2e8c0d47"},
+        {"handle": "stranger", "route": "nergal"},
     ]
-    assert bellhop.calls() == [["sessions", "--json"]]
+    assert bellhop.calls() == [["sessions", "--json"], ["agents", "--json"]]
 
 
 def test_all_routes_resolving_passes_in_text(
     bellhop: FakeBellhop, capsys: pytest.CaptureFixture[str]
 ) -> None:
     bellhop.replay("sessions", "sessions.json")
+    bellhop.replay("agents", "agents.json")
     _seed(("enki", "enki"))
     assert run(["doctor"], runtime()) == 0
     assert capsys.readouterr() == (

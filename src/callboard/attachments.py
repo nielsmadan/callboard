@@ -31,6 +31,7 @@ class Pruned:
     blobs: int
     blob_bytes: int
     temp_files: int
+    wal_truncated: bool
 
 
 COMPRESSED = {"gzip": "application/gzip", "bzip2": "application/x-bzip2", "xz": "application/x-xz"}
@@ -62,17 +63,21 @@ def store_blob(source: BinaryIO, directory: Path, limit: int, label: str) -> Blo
                 out.write(chunk)
             out.flush()
             os.fsync(out.fileno())
-        target = directory / digest.hexdigest()
-        if target.exists():
-            os.unlink(temp)
-            os.utime(target)
-        else:
-            os.rename(temp, target)
+        _keep(temp, directory / digest.hexdigest())
     except BaseException:
         with suppress(FileNotFoundError):
             os.unlink(temp)
         raise
     return Blob(digest.hexdigest(), size)
+
+
+def _keep(temp: str, target: Path) -> None:
+    try:
+        os.utime(target)
+    except FileNotFoundError:
+        os.rename(temp, target)
+    else:
+        os.unlink(temp)
 
 
 def _checked(path: Path, limit: int) -> Path:
@@ -144,27 +149,42 @@ def attachment(conn: sqlite3.Connection, attachment_id: str) -> tuple[Attachment
     return None if row is None else (_attachment_of(row), row["message_id"])
 
 
-def _stale(path: Path, now: float) -> bool:
+def _age(path: Path, now: float) -> tuple[float, int] | None:
     try:
-        return now - path.stat().st_mtime > PRUNE_GRACE_SECONDS
+        info = path.stat()
     except FileNotFoundError:
-        return False
+        return None
+    return now - info.st_mtime, info.st_size
+
+
+def _remove_if_stale(path: Path, now: float) -> int | None:
+    found = _age(path, now)
+    if found is None or found[0] <= PRUNE_GRACE_SECONDS:
+        return None
+    with suppress(FileNotFoundError):
+        path.unlink()
+    return found[1]
 
 
 def prune(conn: sqlite3.Connection, directory: Path, now: float) -> Pruned:
     referenced = {row[0] for row in conn.execute("SELECT DISTINCT sha256 FROM attachments")}
     entries = sorted(directory.iterdir()) if directory.is_dir() else []
-    blobs = [
+    orphans = [
         entry
         for entry in entries
-        if BLOB_NAME.fullmatch(entry.name) and entry.name not in referenced and _stale(entry, now)
+        if BLOB_NAME.fullmatch(entry.name) and entry.name not in referenced
     ]
-    temps = [
-        entry for entry in entries if entry.name.startswith(TEMP_PREFIX) and _stale(entry, now)
-    ]
-    blob_bytes = sum(entry.stat().st_size for entry in blobs)
-    for entry in [*blobs, *temps]:
-        with suppress(FileNotFoundError):
-            entry.unlink()
-    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    return Pruned(len(blobs), blob_bytes, len(temps))
+    temps = [entry for entry in entries if entry.name.startswith(TEMP_PREFIX)]
+    removed = [size for entry in orphans if (size := _remove_if_stale(entry, now)) is not None]
+    stale_temps = [entry for entry in temps if _remove_if_stale(entry, now) is not None]
+    return Pruned(len(removed), sum(removed), len(stale_temps), truncate_wal(conn))
+
+
+def truncate_wal(conn: sqlite3.Connection) -> bool:
+    previous = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    conn.execute("PRAGMA busy_timeout = 1000")
+    try:
+        busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+    finally:
+        conn.execute(f"PRAGMA busy_timeout = {int(previous)}")
+    return int(busy) == 0

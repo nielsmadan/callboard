@@ -21,7 +21,7 @@
         "recipient": "nanna",
         "ping": "idle",
         "ping_state": "pending",
-        "bellhop_id": null,
+        "bellhop_id": "bh_7f3a9c2e41d0",
         "inline": false,
         "read_at": null
       }

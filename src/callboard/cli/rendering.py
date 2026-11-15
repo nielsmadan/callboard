@@ -4,6 +4,16 @@ from pathlib import Path
 from callboard.models import Attachment, Conversation, InboxEntry, Message, Receipt
 from callboard.refs import ref_of
 
+CONTROL_ESCAPES = {code: f"\\x{code:02x}" for code in (*range(0x20), *range(0x7F, 0xA0))} | {
+    ord("\n"): "\\n",
+    ord("\r"): "\\r",
+    ord("\t"): "\\t",
+}
+
+
+def one_line(text: str) -> str:
+    return text.translate(CONTROL_ESCAPES)
+
 
 def attachment_json(item: Attachment, directory: Path) -> dict[str, object]:
     return {
@@ -29,7 +39,7 @@ def message_json(item: Message, files: Sequence[Attachment], directory: Path) ->
 
 def attachment_line(item: Attachment, directory: Path) -> str:
     return (
-        f"  attachment {item.id}  {item.filename}  {item.media_type}  {item.size} bytes"
+        f"  attachment {item.id}  {one_line(item.filename)}  {item.media_type}  {item.size} bytes"
         f"  {directory / item.sha256}"
     )
 
@@ -85,7 +95,7 @@ def inbox_line(entry: InboxEntry, caller: str, width: int) -> str:
 
 
 def mail_line(entry: InboxEntry, width: int) -> str:
-    subject = entry.conversation.subject or ""
+    subject = one_line(entry.conversation.subject or "")
     return (
         f"{entry.conversation.id:<{width}}  {entry.unread} unread  from {entry.sender}: {subject}"
     )

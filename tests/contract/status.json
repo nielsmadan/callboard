@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [
+    "unknown message id bh_000000000000"
+  ],
+  "messages": [
+    {
+      "id": "bh_7f3a9c2e41d0",
+      "key": "cb_19ab4c7d2e10:enki",
+      "sender": "nanna",
+      "urgency": "idle",
+      "degraded_from": null,
+      "route": "claude-relay",
+      "detail": "forwarded via child-env",
+      "created_at": "2026-11-14T09:12:03Z",
+      "sent_at": "2026-11-14T09:12:04Z",
+      "confirmed_at": "2026-11-14T09:12:06Z",
+      "target": {
+        "kind": "agent",
+        "agent": "enki",
+        "session_id": "2e2042a9-937c-4e03-ba25-74b5ba14a58f",
+        "harness": "claude",
+        "title": "callboard"
+      },
+      "state": "confirmed"
+    }
+  ]
+}

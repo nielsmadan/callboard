@@ -1,10 +1,11 @@
 import os
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
 
+from callboard.bellhop_client import Caller, caller_for
 from callboard.errors import CallboardError
 from callboard.identity import resolve_caller, route_of, validate_handle, whoami
 from callboard.models import BellhopSession
@@ -20,6 +21,10 @@ def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     connection = open_store(tmp_path / "store" / "callboard.sqlite")
     yield connection
     connection.close()
+
+
+def _bell(env: Mapping[str, str], budget: float = 20.0) -> Caller:
+    return caller_for(("bellhop",), env, budget)
 
 
 def _script(directory: Path, body: str) -> None:
@@ -54,7 +59,7 @@ def test_invalid_handles_are_usage_errors(handle: str) -> None:
 
 def test_whoami_reads_an_agent_bound_session(bellhop: FakeBellhop) -> None:
     bellhop.replay("whoami", "whoami-agent.json")
-    session = whoami(os.environ)
+    session = whoami(_bell(os.environ))
     assert session == BellhopSession(ENKI_SESSION, "claude", "callboard", "enki")
     assert route_of(session) == "enki"
     assert bellhop.calls() == [["whoami", "--json"]]
@@ -62,7 +67,7 @@ def test_whoami_reads_an_agent_bound_session(bellhop: FakeBellhop) -> None:
 
 def test_whoami_without_an_agent_routes_by_session_id(bellhop: FakeBellhop) -> None:
     bellhop.replay("whoami", "whoami-session.json")
-    session = whoami(os.environ)
+    session = whoami(_bell(os.environ))
     assert session == BellhopSession(UNNAMED_SESSION, "codex", "reviewer", None)
     assert route_of(session) == UNNAMED_SESSION
 
@@ -70,7 +75,7 @@ def test_whoami_without_an_agent_routes_by_session_id(bellhop: FakeBellhop) -> N
 def test_whoami_outside_a_session_is_not_found(bellhop: FakeBellhop) -> None:
     bellhop.replay("whoami", "whoami-not-found.json")
     with pytest.raises(CallboardError) as caught:
-        whoami(os.environ)
+        whoami(_bell(os.environ))
     assert _error(caught) == (
         "not_in_session",
         3,
@@ -80,7 +85,7 @@ def test_whoami_outside_a_session_is_not_found(bellhop: FakeBellhop) -> None:
 
 def test_whoami_without_bellhop_on_path_fails() -> None:
     with pytest.raises(CallboardError) as caught:
-        whoami(os.environ)
+        whoami(_bell(os.environ))
     assert _error(caught) == ("bellhop_failed", 1, "bellhop not found on PATH")
 
 
@@ -91,7 +96,7 @@ def test_whoami_passes_hls_unavailable_through(tmp_path: Path) -> None:
 exit 5""",
     )
     with pytest.raises(CallboardError) as caught:
-        whoami({"PATH": str(tmp_path / "bin")})
+        whoami(_bell({"PATH": str(tmp_path / "bin")}))
     assert _error(caught) == ("hls_unavailable", 5, "bellhop whoami: hls timed out")
 
 
@@ -102,7 +107,7 @@ def test_whoami_reports_other_bellhop_errors_as_failures(tmp_path: Path) -> None
 exit 1""",
     )
     with pytest.raises(CallboardError) as caught:
-        whoami({"PATH": str(tmp_path / "bin")})
+        whoami(_bell({"PATH": str(tmp_path / "bin")}))
     assert _error(caught) == ("bellhop_failed", 1, "bellhop whoami: no message")
 
 
@@ -120,14 +125,14 @@ exit 1""",
 def test_whoami_rejects_unexpected_output(tmp_path: Path, output: str, message: str) -> None:
     _script(tmp_path / "bin", f"echo '{output}'")
     with pytest.raises(CallboardError) as caught:
-        whoami({"PATH": str(tmp_path / "bin")})
+        whoami(_bell({"PATH": str(tmp_path / "bin")}))
     assert _error(caught) == ("bellhop_failed", 1, message)
 
 
 def test_whoami_gives_up_after_the_timeout(tmp_path: Path) -> None:
     _script(tmp_path / "bin", "exec /bin/sleep 5")
     with pytest.raises(CallboardError) as caught:
-        whoami({"PATH": str(tmp_path / "bin")}, timeout=0.2)
+        whoami(_bell({"PATH": str(tmp_path / "bin")}, 0.2))
     assert _error(caught) == ("bellhop_failed", 1, "bellhop whoami timed out after 0.2s")
 
 
@@ -135,7 +140,7 @@ def test_whoami_reports_a_bellhop_that_cannot_run(tmp_path: Path) -> None:
     _script(tmp_path / "bin", "")
     (tmp_path / "bin" / "bellhop").write_text("#!/nonexistent/interpreter\n")
     with pytest.raises(CallboardError) as caught:
-        whoami({"PATH": str(tmp_path / "bin")})
+        whoami(_bell({"PATH": str(tmp_path / "bin")}))
     assert caught.value.code == "bellhop_failed"
     assert str(caught.value).startswith("cannot run bellhop whoami: ")
 
@@ -147,10 +152,10 @@ def test_as_flag_wins_over_env_and_session(
         join_participant(conn, handle, "agent", route, "t")
     bellhop.replay("whoami", "whoami-agent.json")
     monkeypatch.setenv("CALLBOARD_AS", "ben")
-    assert resolve_caller(conn, "ana", os.environ).handle == "ana"
-    assert resolve_caller(conn, None, os.environ).handle == "ben"
+    assert resolve_caller(conn, "ana", _bell(os.environ)).handle == "ana"
+    assert resolve_caller(conn, None, _bell(os.environ)).handle == "ben"
     monkeypatch.delenv("CALLBOARD_AS")
-    assert resolve_caller(conn, None, os.environ).handle == "enki"
+    assert resolve_caller(conn, None, _bell(os.environ)).handle == "enki"
     assert bellhop.calls() == [["whoami", "--json"]]
 
 
@@ -159,16 +164,16 @@ def test_session_is_matched_by_agent_name_before_session_id(
 ) -> None:
     join_participant(conn, "by-session", "agent", ENKI_SESSION, "t")
     bellhop.replay("whoami", "whoami-agent.json")
-    assert resolve_caller(conn, None, os.environ).handle == "by-session"
+    assert resolve_caller(conn, None, _bell(os.environ)).handle == "by-session"
     join_participant(conn, "by-agent", "agent", "enki", "t")
-    assert resolve_caller(conn, None, os.environ).handle == "by-agent"
+    assert resolve_caller(conn, None, _bell(os.environ)).handle == "by-agent"
 
 
 def test_an_unknown_explicit_handle_is_not_found(
     conn: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with pytest.raises(CallboardError) as caught:
-        resolve_caller(conn, "ghost", os.environ)
+        resolve_caller(conn, "ghost", _bell(os.environ))
     assert _error(caught) == (
         "unknown_handle",
         3,
@@ -176,7 +181,7 @@ def test_an_unknown_explicit_handle_is_not_found(
     )
     monkeypatch.setenv("CALLBOARD_AS", "Bad Name")
     with pytest.raises(CallboardError) as caught:
-        resolve_caller(conn, None, os.environ)
+        resolve_caller(conn, None, _bell(os.environ))
     assert caught.value.exit_code == 2
 
 
@@ -185,7 +190,7 @@ def test_an_unjoined_session_is_not_found_with_the_join_hint(
 ) -> None:
     bellhop.replay("whoami", "whoami-session.json")
     with pytest.raises(CallboardError) as caught:
-        resolve_caller(conn, None, os.environ)
+        resolve_caller(conn, None, _bell(os.environ))
     assert _error(caught) == (
         "identity_not_found",
         3,
@@ -198,7 +203,7 @@ def test_no_session_at_all_is_not_found_with_the_join_hint(
 ) -> None:
     bellhop.replay("whoami", "whoami-not-found.json")
     with pytest.raises(CallboardError) as caught:
-        resolve_caller(conn, None, os.environ)
+        resolve_caller(conn, None, _bell(os.environ))
     assert _error(caught) == (
         "identity_not_found",
         3,
@@ -218,7 +223,7 @@ def test_two_handles_on_one_route_are_ambiguous(
     )
     bellhop.replay("whoami", "whoami-agent.json")
     with pytest.raises(CallboardError) as caught:
-        resolve_caller(conn, None, os.environ)
+        resolve_caller(conn, None, _bell(os.environ))
     assert _error(caught) == (
         "identity_ambiguous",
         3,
@@ -230,7 +235,7 @@ def test_hls_or_bellhop_failures_are_not_reported_as_unjoined(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
     with pytest.raises(CallboardError) as caught:
-        resolve_caller(conn, None, {"PATH": str(tmp_path / "empty")})
+        resolve_caller(conn, None, _bell({"PATH": str(tmp_path / "empty")}))
     assert _error(caught) == ("bellhop_failed", 1, "bellhop not found on PATH")
     _script(
         tmp_path / "bin",
@@ -238,5 +243,5 @@ def test_hls_or_bellhop_failures_are_not_reported_as_unjoined(
 exit 5""",
     )
     with pytest.raises(CallboardError) as caught:
-        resolve_caller(conn, None, {"PATH": str(tmp_path / "bin")})
+        resolve_caller(conn, None, _bell({"PATH": str(tmp_path / "bin")}))
     assert _error(caught) == ("hls_unavailable", 5, "bellhop whoami: hls timed out")

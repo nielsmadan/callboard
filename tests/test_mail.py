@@ -2,6 +2,8 @@ import pytest
 
 from helpers import Callboard, rows, seed
 
+pytestmark = pytest.mark.usefixtures("ringing")
+
 THREAD = "mail:000000000002"
 
 
@@ -220,3 +222,11 @@ def test_repeated_to_and_cc_add_up(cb: Callboard) -> None:
         ("niels", "to"),
         ("utu", "cc"),
     ]
+
+
+def test_control_characters_in_subjects_cannot_forge_inbox_lines(cb: Callboard) -> None:
+    subject = "Plan\nmail:fake  9 unread"
+    assert cb("--as", "enki", "mail", "send", "--to", "nanna", "--subject", subject, "x").code == 0
+    assert cb("--as", "nanna", "inbox").out == (
+        "mail:\n  mail:000000000002  1 unread  from enki: Plan\\nmail:fake  9 unread\n"
+    )

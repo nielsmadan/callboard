@@ -3,6 +3,7 @@ import io
 import os
 import sqlite3
 import stat
+import time
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,8 @@ from callboard.attachments import TEMP_PREFIX, media_type, store_blob
 from callboard.errors import CallboardError
 from callboard.paths import attachments_dir, config_path, store_path
 from helpers import CLOCK, Callboard, FakeBellhop, rows, seed
+
+pytestmark = pytest.mark.usefixtures("ringing")
 
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489")
 BINARY = bytes(range(256)) * 9
@@ -193,15 +196,14 @@ def test_a_stream_growing_past_the_limit_is_refused_and_cleaned_up(tmp_path: Pat
     assert list((tmp_path / "blobs").iterdir()) == []
 
 
-class _Changing(io.BytesIO):
-    def __init__(self, source: Path) -> None:
-        super().__init__(source.read_bytes())
-        self.source = source
-
+class _Rewritten(io.FileIO):
     def read(self, size: int | None = -1) -> bytes:
         chunk = super().read(size)
-        with self.source.open("ab") as grow:
-            grow.write(b"appended while copying")
+        if self.tell() == len(chunk):
+            with open(self.name, "r+b") as other:
+                other.truncate(200)
+                other.seek(0, io.SEEK_END)
+                other.write(b"Z" * 50)
         return chunk
 
 
@@ -209,11 +211,13 @@ def test_a_source_changing_during_the_copy_yields_a_blob_matching_its_hash(
     tmp_path: Path, files: dict[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("callboard.attachments.CHUNK_BYTES", 64)
-    blob = store_blob(_Changing(files["blob.bin"]), tmp_path / "blobs", 10_000, "x")
+    source = files["blob.bin"]
+    with _Rewritten(source, "rb") as stream:
+        blob = store_blob(stream, tmp_path / "blobs", 10_000, "x")
     stored = (tmp_path / "blobs" / blob.sha256).read_bytes()
     assert hashlib.sha256(stored).hexdigest() == blob.sha256
-    assert len(stored) == blob.size
-    assert files["blob.bin"].read_bytes() != stored
+    assert (len(stored), blob.size) == (250, 250)
+    assert stored == BINARY[:200] + b"Z" * 50
 
 
 def _age(seconds: int) -> None:
@@ -227,8 +231,18 @@ def test_a_failed_insert_leaves_a_blob_that_prune_removes(
 ) -> None:
     kept = cb("--as", "enki", "dm", "nanna", "kept", "--attach", str(files["pixel.png"]))
     assert kept.code == 0
-    failed = cb("--as", "enki", "dm", "ghost", "lost", "--attach", str(files["blob.bin"]))
-    assert failed == (3, "", "callboard: no participant 'ghost'\n")
+    failed = cb(
+        "--as",
+        "enki",
+        "dm",
+        "nanna",
+        "lost",
+        "--reply-to",
+        "cb_0000000000ff",
+        "--attach",
+        str(files["blob.bin"]),
+    )
+    assert failed == (3, "", "callboard: --reply-to: no message cb_0000000000ff\n")
     orphan = hashlib.sha256(BINARY).hexdigest()
     assert _blobs() == sorted([hashlib.sha256(PNG).hexdigest(), orphan])
     assert rows("SELECT count(*) FROM messages") == [(1,)]
@@ -337,8 +351,99 @@ def test_reusing_a_blob_refreshes_it_so_prune_keeps_it(
     cb: Callboard, files: dict[str, Path]
 ) -> None:
     png = str(files["pixel.png"])
-    assert cb("--as", "enki", "dm", "ghost", "lost", "--attach", png).code == 3
+    assert (
+        cb(
+            "--as", "enki", "dm", "nanna", "x", "--reply-to", "cb_0000000000ff", "--attach", png
+        ).code
+        == 3
+    )
     stored = attachments_dir(os.environ) / hashlib.sha256(PNG).hexdigest()
     os.utime(stored, (1_000_000_000, 1_000_000_000))
     assert cb("--as", "enki", "dm", "nanna", "kept", "--attach", png).code == 0
     assert stored.stat().st_mtime > 1_000_000_000
+
+
+def test_prune_reports_a_wal_it_could_not_truncate(
+    cb: Callboard, files: dict[str, Path], bellhop: FakeBellhop
+) -> None:
+    assert cb("--as", "enki", "dm", "nanna", "f", "--attach", str(files["pixel.png"])).code == 0
+    wal = Path(f"{store_path(os.environ)}-wal")
+    with closing(sqlite3.connect(store_path(os.environ), isolation_level=None)) as reader:
+        reader.execute(
+            "INSERT INTO participants (handle, kind, created_at) VALUES ('anu', 'human', 't')"
+        )
+        reader.execute("BEGIN")
+        reader.execute("SELECT count(*) FROM participants").fetchone()
+        started = time.monotonic()
+        result = cb("doctor", "--prune", "--json")
+        elapsed = time.monotonic() - started
+        assert wal.stat().st_size > 0
+        reader.execute("COMMIT")
+    assert result.json()["pruned"]["wal_truncated"] is False
+    assert elapsed < 10
+
+
+def test_a_blob_pruned_while_it_is_reused_is_stored_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = tmp_path / "blobs"
+    first = store_blob(io.BytesIO(PNG), directory, 10_000, "x")
+    real_utime = os.utime
+
+    def pruned_meanwhile(path: object, *args: object) -> None:
+        Path(str(path)).unlink()
+        raise FileNotFoundError(path)
+
+    monkeypatch.setattr("callboard.attachments.os.utime", pruned_meanwhile)
+    second = store_blob(io.BytesIO(PNG), directory, 10_000, "x")
+    monkeypatch.setattr("callboard.attachments.os.utime", real_utime)
+    assert second == first
+    assert (directory / first.sha256).read_bytes() == PNG
+    assert [entry.name for entry in directory.iterdir()] == [first.sha256]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("dm", "ghost", "x"),
+        ("group", "send", "nope", "x"),
+        ("mail", "send", "--to", "ghost", "--subject", "s", "x"),
+        ("mail", "reply", "cb_0000000000ff", "x"),
+    ],
+)
+def test_cheap_checks_run_before_anything_is_copied(
+    cb: Callboard, files: dict[str, Path], argv: tuple[str, ...]
+) -> None:
+    result = cb("--as", "enki", *argv, "--attach", str(files["blob.bin"]))
+    assert result.code == 3
+    assert _blobs() == []
+
+
+def test_control_characters_in_filenames_cannot_forge_lines(cb: Callboard, tmp_path: Path) -> None:
+    sneaky = tmp_path / "a\nfake line\x1b[31m.txt"
+    sneaky.write_text("x")
+    assert cb("--as", "enki", "dm", "nanna", "see", "--attach", str(sneaky)).code == 0
+    lines = cb("--as", "nanna", "read", "@enki").out.splitlines()
+    assert len(lines) == 2
+    assert "  a\\nfake line\\x1b[31m.txt  " in lines[1]
+    listed = cb("--as", "nanna", "history", "@enki", "--json").json()["messages"][0]
+    assert listed["attachments"][0]["filename"] == "a\nfake line\x1b[31m.txt"
+
+
+def test_a_failed_out_copy_leaves_no_partial_file(
+    cb: Callboard, files: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert cb("--as", "enki", "dm", "nanna", "f", "--attach", str(files["blob.bin"])).code == 0
+    out = tmp_path / "copy.bin"
+
+    def disk_full(source: io.BufferedReader, target: io.BufferedWriter) -> None:
+        target.write(source.read(10))
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr("callboard.cli.reading.shutil.copyfileobj", disk_full)
+    assert cb("--as", "nanna", "attachment", "get", "at_000000000002", "--out", str(out)) == (
+        2,
+        "",
+        f"callboard: --out: cannot write {out}: No space left on device\n",
+    )
+    assert not out.exists()

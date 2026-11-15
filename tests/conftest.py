@@ -35,10 +35,19 @@ def bellhop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeBellhop:
 def cb(capsys: pytest.CaptureFixture[str]) -> Callboard:
     counter = itertools.count(1)
 
-    def call(*argv: str, stdin: str = "") -> Result:
-        runtime = Runtime(os.environ, lambda: CLOCK, lambda: f"{next(counter):012x}", lambda: stdin)
+    def call(*argv: str, stdin: str = "", deadline: float = 20.0) -> Result:
+        runtime = Runtime(
+            os.environ, lambda: CLOCK, lambda: f"{next(counter):012x}", lambda: stdin, deadline
+        )
         code = run(list(argv), runtime)
         out, err = capsys.readouterr()
         return Result(code, out, err)
 
     return call
+
+
+@pytest.fixture
+def ringing(bellhop: FakeBellhop) -> FakeBellhop:
+    bellhop.replay("send", "send-pending.json")
+    bellhop.replay("status", "status-pending.json")
+    return bellhop

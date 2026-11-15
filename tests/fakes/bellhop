@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 CONTRACT = Path(__file__).resolve().parent.parent / "contract"
@@ -13,11 +15,21 @@ if log:
     with open(log, "a", encoding="utf-8") as handle:
         handle.write(json.dumps({"argv": arguments, "stdin": stdin}) + "\n")
 
+time.sleep(float(os.environ.get("FAKE_BELLHOP_SLEEP", "0")))
+raw = os.environ.get("FAKE_BELLHOP_RAW")
+if raw is not None:
+    print(raw)
+    sys.exit(int(os.environ.get("FAKE_BELLHOP_EXIT", "0")))
+
 command = arguments[0] if arguments else ""
 fixture = os.environ.get(f"FAKE_BELLHOP_{command.upper()}")
 if not fixture:
     print(f"fake bellhop: no fixture for '{command}'", file=sys.stderr)
     sys.exit(2)
 payload = json.loads((CONTRACT / fixture).read_text(encoding="utf-8"))
+if os.environ.get("FAKE_BELLHOP_KEYED_IDS") and "--key" in arguments:
+    key = arguments[arguments.index("--key") + 1]
+    payload["message"]["key"] = key
+    payload["message"]["id"] = "bh_" + hashlib.sha256(key.encode()).hexdigest()[:12]
 print(json.dumps(payload))
-sys.exit(payload.get("exit_code", 0))
+sys.exit(int(os.environ.get("FAKE_BELLHOP_EXIT", payload.get("exit_code", 0))))

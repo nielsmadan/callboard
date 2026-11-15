@@ -1,8 +1,10 @@
 import argparse
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from contextlib import closing
 
+from callboard.bellhop_client import Caller
+from callboard.cli.context import bellhop, settings
 from callboard.cli.presentation import diagnostic, emit
 from callboard.errors import CallboardError
 from callboard.identity import resolve_caller, route_of, validate_handle, whoami
@@ -18,9 +20,9 @@ def describe(member: Participant) -> str:
     return "human, no route" if member.kind == "human" else "no route"
 
 
-def _session(env: Mapping[str, str]) -> BellhopSession:
+def _session(bell: Caller) -> BellhopSession:
     try:
-        return whoami(env)
+        return whoami(bell)
     except CallboardError as error:
         if error.code != "not_in_session":
             raise
@@ -34,7 +36,7 @@ def join(args: argparse.Namespace, runtime: Runtime) -> int:
     env = runtime.env
     handle = validate_handle(args.handle)
     kind: ParticipantKind = "human" if args.human else "agent"
-    route = None if args.human else route_of(_session(env))
+    route = None if args.human else route_of(_session(bellhop(runtime, settings(runtime))))
     with closing(open_store(store_path(env))) as conn:
         outcome = join_participant(conn, handle, kind, route, runtime.clock())
     current, previous = outcome.current, outcome.previous
@@ -47,10 +49,10 @@ def join(args: argparse.Namespace, runtime: Runtime) -> int:
 
 
 def _caller(
-    conn: sqlite3.Connection, args: argparse.Namespace, env: Mapping[str, str]
+    conn: sqlite3.Connection, args: argparse.Namespace, bell: Caller
 ) -> tuple[str | None, list[str]]:
     try:
-        return resolve_caller(conn, args.as_handle, env).handle, []
+        return resolve_caller(conn, args.as_handle, bell).handle, []
     except CallboardError as error:
         if error.code == "identity_not_found":
             return None, []
@@ -86,7 +88,7 @@ def who(args: argparse.Namespace, runtime: Runtime) -> int:
     env = runtime.env
     with closing(open_store(store_path(env))) as conn:
         members = participants(conn)
-        you, warnings = _caller(conn, args, env)
+        you, warnings = _caller(conn, args, bellhop(runtime, settings(runtime)))
     for warning in warnings:
         diagnostic(warning)
     payload = ok_payload(

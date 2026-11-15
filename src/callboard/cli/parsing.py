@@ -38,6 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     doctor.add_argument("--json", action="store_true", help="print one JSON object")
     doctor.add_argument(
+        "--reping", action="store_true", help="ring receipts that bellhop never accepted"
+    )
+    doctor.add_argument(
         "--prune", action="store_true", help="remove unreferenced attachments; truncate the WAL"
     )
     _add_chat(commands)

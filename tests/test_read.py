@@ -1,10 +1,12 @@
 import pytest
 
-from helpers import Callboard, chat_scenario, load_golden, rows
+from helpers import Callboard, FakeBellhop, chat_scenario, load_golden, rows
+
+pytestmark = pytest.mark.usefixtures("ringing")
 
 
 @pytest.fixture(autouse=True)
-def scenario(cb: Callboard) -> None:
+def scenario(cb: Callboard, ringing: FakeBellhop) -> None:
     chat_scenario(cb)
 
 

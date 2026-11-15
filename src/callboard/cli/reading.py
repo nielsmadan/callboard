@@ -1,11 +1,15 @@
 import argparse
 import os
 import shutil
+import sqlite3
+from pathlib import Path
+from typing import Literal
 
 from callboard.attachments import attachment as attachment_of
 from callboard.attachments import attachments_of
-from callboard.cli.context import as_caller
-from callboard.cli.presentation import emit
+from callboard.bellhop_client import Caller
+from callboard.cli.context import as_caller, bellhop, settings
+from callboard.cli.presentation import diagnostic, emit
 from callboard.cli.rendering import (
     inbox_json,
     inbox_lines,
@@ -22,22 +26,39 @@ from callboard.messages import history as history_of
 from callboard.messages import read_conversation, read_message, require_message
 from callboard.models import Runtime
 from callboard.paths import attachments_dir
+from callboard.ping import refresh
 from callboard.receipts import inbox as inbox_of
 from callboard.receipts import receipts as receipts_of
 from callboard.refs import ConversationRef, parse_ref, ref_of
 
 
+def _refresh(
+    conn: sqlite3.Connection,
+    scope: Literal["recipient", "message"],
+    value: str,
+    bell: Caller,
+    now: str,
+) -> list[str]:
+    warnings = refresh(conn, scope, value, bell, now)
+    for warning in warnings:
+        diagnostic(warning)
+    return warnings
+
+
 def inbox(args: argparse.Namespace, runtime: Runtime) -> int:
-    with as_caller(args, runtime) as (conn, caller):
+    bell = bellhop(runtime, settings(runtime))
+    with as_caller(args, runtime, bell) as (conn, caller):
+        warnings = _refresh(conn, "recipient", caller.handle, bell, runtime.clock())
         entries = inbox_of(conn, caller.handle)
     me = caller.handle
-    payload = ok_payload({"conversations": [inbox_json(entry, me) for entry in entries]})
+    payload = ok_payload({"conversations": [inbox_json(entry, me) for entry in entries]}, warnings)
     emit(payload, inbox_lines(entries, me), json_mode=args.json)
     return 0
 
 
 def read(args: argparse.Namespace, runtime: Runtime) -> int:
-    with as_caller(args, runtime) as (conn, caller):
+    bell = bellhop(runtime, settings(runtime))
+    with as_caller(args, runtime, bell) as (conn, caller):
         ref = parse_ref(args.ref, caller.handle)
         now = runtime.clock()
         if isinstance(ref, ConversationRef):
@@ -58,7 +79,8 @@ def read(args: argparse.Namespace, runtime: Runtime) -> int:
 
 
 def history(args: argparse.Namespace, runtime: Runtime) -> int:
-    with as_caller(args, runtime) as (conn, caller):
+    bell = bellhop(runtime, settings(runtime))
+    with as_caller(args, runtime, bell) as (conn, caller):
         ref = parse_ref(args.ref, caller.handle)
         if isinstance(ref, ConversationRef):
             conversation_id = require_member(conn, ref.conversation_id, caller.handle).id
@@ -75,8 +97,10 @@ def history(args: argparse.Namespace, runtime: Runtime) -> int:
 
 
 def receipts(args: argparse.Namespace, runtime: Runtime) -> int:
-    with as_caller(args, runtime) as (conn, caller):
+    bell = bellhop(runtime, settings(runtime))
+    with as_caller(args, runtime, bell) as (conn, caller):
         found = require_message(conn, args.message_id, caller.handle)
+        warnings = _refresh(conn, "message", found.id, bell, runtime.clock())
         items = receipts_of(conn, found.id)
         files = attachments_of(conn, [found.id])[found.id]
     directory = attachments_dir(runtime.env)
@@ -84,14 +108,16 @@ def receipts(args: argparse.Namespace, runtime: Runtime) -> int:
         {
             "message": message_json(found, files, directory),
             "receipts": [receipt_json(item) for item in items],
-        }
+        },
+        warnings,
     )
     emit(payload, receipt_lines(items), json_mode=args.json)
     return 0
 
 
 def attachment(args: argparse.Namespace, runtime: Runtime) -> int:
-    with as_caller(args, runtime) as (conn, caller):
+    bell = bellhop(runtime, settings(runtime))
+    with as_caller(args, runtime, bell) as (conn, caller):
         found = attachment_of(conn, args.attachment_id)
         if found is None:
             raise CallboardError(f"no attachment {args.attachment_id}", code="attachment_not_found")
@@ -107,12 +133,16 @@ def attachment(args: argparse.Namespace, runtime: Runtime) -> int:
         return 0
     if os.path.isdir(args.out):
         raise CallboardError(f"--out: {args.out} is a directory; name a file", code="usage")
+    created = False
     try:
         with stored.open("rb") as source, open(args.out, "xb") as target:
+            created = True
             shutil.copyfileobj(source, target)
     except FileExistsError as error:
         raise CallboardError(f"--out: {args.out} already exists", code="usage") from error
     except OSError as error:
+        if created:
+            Path(args.out).unlink(missing_ok=True)
         raise CallboardError(
             f"--out: cannot write {args.out}: {error.strerror}", code="usage"
         ) from error

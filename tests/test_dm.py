@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import subprocess
 import sys
 
@@ -7,6 +8,8 @@ import pytest
 from callboard.cli.dispatch import run
 from callboard.models import Runtime
 from helpers import Callboard, rows, seed
+
+pytestmark = pytest.mark.usefixtures("ringing")
 
 
 @pytest.fixture(autouse=True)
@@ -82,6 +85,27 @@ def test_stdin_that_is_not_utf8_is_a_usage_error(cb: Callboard) -> None:
     runtime = Runtime(os.environ, lambda: "t", lambda: "000000000001", undecodable)
     assert run(["--as", "enki", "dm", "nanna"], runtime) == 2
     assert rows("SELECT count(*) FROM messages") == [(0,)]
+
+
+def test_a_failure_after_storing_reports_the_stored_message(
+    cb: Callboard, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(*_args: object) -> object:
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr("callboard.cli.chat.receipts_of", broken)
+    result = cb("--as", "enki", "dm", "nanna", "hello", "--json")
+    payload = result.json()
+    assert (result.code, payload["status"], payload["error"]) == (
+        1,
+        "error",
+        {
+            "code": "store_unavailable",
+            "message": "stored cb_000000000001, then failed: disk I/O error",
+        },
+    )
+    assert payload["message"]["id"] == "cb_000000000001"
+    assert rows("SELECT id FROM messages") == [("cb_000000000001",)]
 
 
 def test_dm_to_yourself_is_a_usage_error(cb: Callboard) -> None:

@@ -4,6 +4,8 @@ import pytest
 
 from helpers import Callboard, load_golden, seed
 
+pytestmark = pytest.mark.usefixtures("ringing")
+
 
 @pytest.fixture
 def outputs(cb: Callboard, tmp_path: Path) -> dict[str, dict[str, object]]:

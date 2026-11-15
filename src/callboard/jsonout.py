@@ -16,6 +16,7 @@ def error_payload(error: CallboardError) -> dict[str, object]:
         "status": "error",
         "exit_code": error.exit_code,
         "error": {"code": error.code, "message": str(error)},
+        **error.extra,
     }
 
 

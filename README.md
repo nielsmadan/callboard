@@ -22,15 +22,25 @@ callboard read <ref> [--peek] [--json]            # print unread and mark it rea
 callboard history <ref> [--limit N] [--json]
 callboard receipts <message-id> [--json]
 callboard attachment get <attachment-id> [--out PATH]   # print the stored path, or copy it
-callboard doctor [--prune] [--json]               # check the store, data directory, bellhop and routes
+callboard doctor [--reping] [--prune] [--json]    # check the store, data directory, bellhop and routes
 callboard --version
 ```
 
 `<ref>` is `@handle` (your direct chat with them), `group:<name>`, `mail:<id>` or a message id
 `cb_…`. TEXT is read from stdin when omitted. A direct message rings the recipient; in a group
 only an `@mention` of a member rings. Mail is held for the recipients' `bellhop inbox` unless
-`--urgent`. Ringing itself arrives in a later version: for now each
-receipt records the ping it will get.
+`--urgent`.
+
+Ringing goes through bellhop once the message is stored. A direct message rings at `idle` and wakes
+a stopped agent (`--now` interrupts instead), a group mention the same, mail is a `hold` doorbell,
+or `idle` with `--urgent`. A short message (500 characters or less, no attachments) arrives in full,
+`callboard cb_… dm from enki: <body>`, and counts as read once bellhop confirms it reached the
+session. Anything else arrives as a doorbell, `callboard cb_… dm from enki (1,840 chars, 2
+attachments); read: callboard read cb_…`. Recipients ring concurrently, and each command gives
+bellhop 20 seconds in total, identity lookup included. If bellhop is missing, slow or fails, the
+message is still stored, the command still exits 0, and the problem is printed as a warning;
+`callboard doctor --reping` rings again whatever bellhop never accepted. `receipts` and `inbox`
+refresh recent ping states from `bellhop status`.
 
 A session holds one handle. Joining as another handle from the same session moves the session's
 route to the new handle; the old handle keeps its messages but has no route, so nothing rings it
@@ -54,6 +64,7 @@ Configuration is optional, in `$XDG_CONFIG_HOME/callboard/config.toml`:
 
 ```toml
 max_attachment_bytes = 52428800   # per file; default 50 MiB
+ping_command = ["bellhop"]        # argv for every bellhop call; default: bellhop on PATH
 ```
 
 ## License

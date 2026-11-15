@@ -3,6 +3,8 @@ import pytest
 from callboard.mentions import mentioned
 from helpers import Callboard, rows, seed
 
+pytestmark = pytest.mark.usefixtures("ringing")
+
 
 @pytest.fixture(autouse=True)
 def people() -> None:
@@ -138,6 +140,8 @@ def test_group_text_comes_from_stdin_and_reply_to_stays_in_the_group(
         ("@nanna_, ok", ("nanna",)),
         ("@nannaX", ()),
         ("@nAnna", ()),
+        ("@nannaé", ()),
+        ("@nanna\u2019s turn", ("nanna",)),
         ("@nanna@utu", ()),
         ("@re-view-", ("re-view-",)),
         ("@re-view- and @re-view", ("re-view-", "re-view")),

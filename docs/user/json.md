@@ -24,7 +24,9 @@ Failure:
 }
 ```
 
-Keys are snake_case. Times are ISO-8601 UTC (`2026-11-14T09:00:00Z`). Usage errors are reported
+When a send command stored its message and then failed (the store became unwritable while
+recording ping results, for example), the error envelope also carries the stored `message` in the
+send shape below, with empty `receipts`. Keys are snake_case. Times are ISO-8601 UTC (`2026-11-14T09:00:00Z`). Usage errors are reported
 in this envelope too, whenever `--json` appears on the command line.
 
 ## Exit codes and error codes
@@ -35,7 +37,7 @@ in this envelope too, whenever `--json` appears on the command line.
 | 1 | failure | `attachment_missing`, `bellhop_failed`, `doctor_failed`, `group_exists`, `internal_error`, `invalid_environment`, `schema_too_new`, `store_unavailable` |
 | 2 | usage | `invalid_config`, `usage` |
 | 3 | not found or ambiguous | `attachment_not_found`, `conversation_not_found`, `identity_ambiguous`, `identity_not_found`, `message_not_found`, `not_a_member`, `not_in_session`, `unknown_handle` |
-| 4 | no usable route | — (reserved for ringing) |
+| 4 | no usable route | — (callboard rings with `--or-hold`, so bellhop's exit 4 becomes a warning) |
 | 5 | hls unavailable | `hls_unavailable` |
 | 130 | interrupted | `interrupted` |
 
@@ -123,12 +125,14 @@ by handle.
 
 With `--prune`, the object also has
 `"pruned": {"blobs": 1, "blob_bytes": 2304, "temp_files": 0, "wal_truncated": true}`, or
-`"pruned": null` when the store check is not `ok` and nothing was pruned.
+`"pruned": null` when the store check is not `ok` and nothing was pruned. With `--reping`, it has
+`"repinged": 2`, the number of receipts rung again (those not `none`, still `pending` and without
+a `bellhop_id`), or `null` when the store check is not `ok`; ringing problems go to `warnings`.
 
 Each check's `status` is `ok`, `warn` or `fail`. When any check fails, the object is the error
 envelope (`doctor_failed`, exit 1) with `checks` and `unresolved` still present. A route resolves
-when it is a session id or agent name in `bellhop sessions --json`. A configured agent that is not
-running currently shows as unresolved.
+when it is a live session id or agent name in `bellhop sessions --json`, or an agent listed in
+`bellhop agents --json` (a stopped agent bellhop can wake).
 
 ## `callboard dm|group send|mail send|mail reply … --json`
 
@@ -146,8 +150,19 @@ This describes the message just stored. `conversation` is the conversation id. `
 one entry per recipient (never the sender), with the ping each one gets: `idle` for a direct
 message (`now` with `--now`, `none` with `--no-ping`); `idle` or `now` for mentioned group
 members and `none` for the rest; `hold` for mail (`idle` with `--urgent`). A recipient with no
-route always gets `none`. Problems while ringing will appear in `warnings`. The text output stays
-one line, `sent <id> to <ref>`.
+route always gets `none`. The receipts are read back after ringing: `bellhop_id` and
+`ping_state` mirror what `bellhop send` answered, and `inline` is true when the ping carried the
+whole message (idle or now, 500 characters or less, no attachments). An inline ping bellhop
+`confirmed` already has `read_at` set.
+
+Ringing never fails the command. Each recipient bellhop could not ring adds one string to
+`warnings` (also printed to stderr), such as `"ping nanna for cb_000000000001: bellhop send timed
+out after 20.0s"`. A receipt stays `pending` without a `bellhop_id` when bellhop was missing, slow,
+printed malformed output or reported hls unavailable (`doctor --reping` rings it again), and
+becomes `failed` when bellhop refused the target (exit 2, 3 or 4) or rejected the push. A ping
+bellhop stored as `hold` because the target had no usable route adds a warning ending in
+`held by bellhop; no usable route for idle`. The text output stays one line,
+`sent <id> to <ref>`.
 
 ## `callboard inbox --json`
 
@@ -186,6 +201,10 @@ This returns the latest `--limit` messages (default 20) in `seq` order and marks
 message id selects that message's conversation.
 
 ## `callboard receipts <message-id> --json`
+
+Before answering, `receipts` and `inbox` refresh receipts that are `pending`, `sending` or `sent`,
+not `hold`, have a `bellhop_id` and belong to a message younger than 15 minutes, with one
+`bellhop status <id>... --json` call. A failed refresh is a warning.
 
 ```json
 {"schema_version": 1, "status": "ok", "warnings": [], "message": message, "receipts": [
