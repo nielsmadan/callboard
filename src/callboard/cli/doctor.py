@@ -6,16 +6,24 @@ import stat
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+from callboard.attachments import Pruned, prune
 from callboard.cli.presentation import diagnostic, emit
 from callboard.errors import CallboardError
 from callboard.identity import live_routes
 from callboard.jsonout import error_payload, ok_payload
 from callboard.models import Participant, Runtime
-from callboard.paths import data_dir, store_path
-from callboard.store import MIGRATIONS, connect_readonly, participants, schema_version
+from callboard.paths import attachments_dir, data_dir, store_path
+from callboard.store import (
+    MIGRATIONS,
+    connect_readonly,
+    open_store,
+    participants,
+    schema_version,
+)
 
 type CheckStatus = Literal["ok", "warn", "fail"]
 
@@ -102,6 +110,33 @@ def _lines(checks: Sequence[Check], unresolved: Sequence[Participant]) -> list[s
     ]
 
 
+def _epoch(stamp: str) -> float:
+    return datetime.fromisoformat(stamp).timestamp()
+
+
+def _prune(runtime: Runtime) -> Pruned:
+    with closing(open_store(store_path(runtime.env))) as conn:
+        return prune(conn, attachments_dir(runtime.env), _epoch(runtime.clock()))
+
+
+def _pruned_json(pruned: Pruned) -> dict[str, object]:
+    return {
+        "blobs": pruned.blobs,
+        "blob_bytes": pruned.blob_bytes,
+        "temp_files": pruned.temp_files,
+        "wal_truncated": True,
+    }
+
+
+def _pruned_line(pruned: Pruned | None) -> str:
+    if pruned is None:
+        return "prune skipped; the store is not ok"
+    return (
+        f"pruned {pruned.blobs} unreferenced attachment files ({pruned.blob_bytes} bytes)"
+        f" and {pruned.temp_files} temp files; truncated the WAL"
+    )
+
+
 def doctor(args: argparse.Namespace, runtime: Runtime) -> int:
     env = runtime.env
     store_check, members = check_store(store_path(env))
@@ -114,15 +149,20 @@ def doctor(args: argparse.Namespace, runtime: Runtime) -> int:
         ],
         "unresolved": [{"handle": member.handle, "route": member.route} for member in unresolved],
     }
+    lines = _lines(checks, unresolved)
+    if args.prune:
+        pruned = _prune(runtime) if store_check.status == "ok" else None
+        fields["pruned"] = None if pruned is None else _pruned_json(pruned)
+        lines.append(_pruned_line(pruned))
     failed = [check.name for check in checks if check.status == "fail"]
     if not failed:
-        emit(ok_payload(fields), _lines(checks, unresolved), json_mode=args.json)
+        emit(ok_payload(fields), lines, json_mode=args.json)
         return 0
     error = CallboardError(
         f"{len(failed)} check{'s' if len(failed) > 1 else ''} failed: {', '.join(failed)}",
         code="doctor_failed",
     )
-    emit({**error_payload(error), **fields}, _lines(checks, unresolved), json_mode=args.json)
+    emit({**error_payload(error), **fields}, lines, json_mode=args.json)
     if not args.json:
         diagnostic(str(error))
     return error.exit_code

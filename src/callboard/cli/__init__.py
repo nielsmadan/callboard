@@ -39,4 +39,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         interrupted = CallboardError("interrupted", code="interrupted")
         report_error(interrupted, json_mode=json_requested(arguments))
         return interrupted.exit_code
+    except Exception as error:
+        unexpected = CallboardError(
+            f"internal error: {type(error).__name__}: {error}", code="internal_error"
+        )
+        report_error(unexpected, json_mode=json_requested(arguments))
+        return unexpected.exit_code
     return exit_code

@@ -1,9 +1,11 @@
 import sqlite3
+from collections.abc import Sequence
 
+from callboard.attachments import insert_attachments
 from callboard.conversations import ensure_dm, members, require_member, require_participants
 from callboard.errors import CallboardError
 from callboard.mentions import mentioned
-from callboard.models import Message
+from callboard.models import Attachment, Message
 from callboard.receipts import insert_receipts, mark_read, ping_for, ring_level
 from callboard.store import participant, write
 
@@ -45,7 +47,9 @@ def check_parent(conn: sqlite3.Connection, parent_id: str | None, conversation_i
         )
 
 
-def insert_message(conn: sqlite3.Connection, draft: Message) -> None:
+def insert_message(
+    conn: sqlite3.Connection, draft: Message, attachments: Sequence[Attachment] = ()
+) -> None:
     conn.execute(
         "INSERT INTO messages (id, conversation_id, sender, body, parent_id, created_at)"
         " VALUES (?, ?, ?, ?, ?, ?)",
@@ -58,10 +62,17 @@ def insert_message(conn: sqlite3.Connection, draft: Message) -> None:
             draft.created_at,
         ),
     )
+    insert_attachments(conn, draft.id, attachments)
 
 
 def send_direct(
-    conn: sqlite3.Connection, draft: Message, recipient: str, *, rings: bool, now: bool
+    conn: sqlite3.Connection,
+    draft: Message,
+    recipient: str,
+    attachments: Sequence[Attachment] = (),
+    *,
+    rings: bool,
+    now: bool,
 ) -> Message:
     with write(conn):
         require_participants(conn, [recipient])
@@ -70,7 +81,7 @@ def send_direct(
             draft.id, conversation_id, draft.sender, draft.body, draft.parent_id, draft.created_at
         )
         check_parent(conn, stored.parent_id, conversation_id)
-        insert_message(conn, stored)
+        insert_message(conn, stored, attachments)
         level = ring_level(now=now) if rings else "none"
         insert_receipts(
             conn, stored.id, {recipient: ping_for(level, route_of_handle(conn, recipient))}
@@ -84,14 +95,18 @@ def route_of_handle(conn: sqlite3.Connection, handle: str) -> str | None:
 
 
 def send_group(
-    conn: sqlite3.Connection, draft: Message, *, now: bool
+    conn: sqlite3.Connection,
+    draft: Message,
+    attachments: Sequence[Attachment] = (),
+    *,
+    now: bool,
 ) -> tuple[Message, tuple[str, ...]]:
     with write(conn):
         require_member(conn, draft.conversation_id, draft.sender)
         check_parent(conn, draft.parent_id, draft.conversation_id)
         handles = members(conn, draft.conversation_id)
         tagged = mentioned(draft.body, handles, draft.sender)
-        insert_message(conn, draft)
+        insert_message(conn, draft, attachments)
         conn.executemany(
             "INSERT INTO mentions (message_id, handle) VALUES (?, ?)",
             [(draft.id, handle) for handle in tagged],

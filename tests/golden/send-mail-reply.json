@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "warnings": [],
+  "message": {
+    "id": "cb_000000000006",
+    "conversation": "mail:000000000005",
+    "sender": "nanna",
+    "created_at": "2026-11-14T09:00:00Z",
+    "parent_id": "cb_000000000004",
+    "attachments": [],
+    "receipts": [
+      {
+        "recipient": "enki",
+        "ping": "idle",
+        "ping_state": "pending",
+        "bellhop_id": null,
+        "inline": false,
+        "read_at": null
+      },
+      {
+        "recipient": "niels",
+        "ping": "none",
+        "ping_state": null,
+        "bellhop_id": null,
+        "inline": false,
+        "read_at": null
+      }
+    ]
+  }
+}

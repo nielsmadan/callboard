@@ -38,6 +38,25 @@ def test_history_of_an_empty_group_says_so(cb: Callboard) -> None:
     assert cb("--as", "nanna", "history", "group:quiet") == (0, "no messages in group:quiet\n", "")
 
 
-@pytest.mark.parametrize("limit", ["0", "-1", "x"])
+@pytest.mark.parametrize("limit", ["0", "-1", "x", "²", "1000001", "99999999999999999999"])
 def test_a_non_positive_limit_is_a_usage_error(cb: Callboard, limit: str) -> None:
     assert cb("--as", "nanna", "history", "group:ops", "--limit", limit).code == 2
+
+
+def test_a_huge_limit_is_a_usage_error_in_the_json_envelope(cb: Callboard) -> None:
+    result = cb(
+        "--as", "nanna", "history", "group:ops", "--limit", "99999999999999999999", "--json"
+    )
+    assert result.code == 2
+    assert result.json()["error"] == {
+        "code": "usage",
+        "message": "argument --limit: must be an integer from 1 to 1000000, got '99999999999999999999'",
+    }
+    assert (
+        len(
+            cb("--as", "nanna", "history", "group:ops", "--limit", "1000000", "--json").json()[
+                "messages"
+            ]
+        )
+        == 2
+    )

@@ -3,6 +3,8 @@ from types import MappingProxyType
 from typing import Literal
 
 type Code = Literal[
+    "attachment_missing",
+    "attachment_not_found",
     "bellhop_failed",
     "conversation_not_found",
     "doctor_failed",
@@ -10,7 +12,9 @@ type Code = Literal[
     "hls_unavailable",
     "identity_ambiguous",
     "identity_not_found",
+    "internal_error",
     "interrupted",
+    "invalid_config",
     "invalid_environment",
     "message_not_found",
     "not_a_member",
@@ -21,6 +25,9 @@ type Code = Literal[
     "usage",
 ]
 
+ATTACHMENT_NOT_FOUND: Code = "attachment_not_found"
+ATTACHMENT_MISSING: Code = "attachment_missing"
+INVALID_CONFIG: Code = "invalid_config"
 BELLHOP_FAILED: Code = "bellhop_failed"
 DOCTOR_FAILED: Code = "doctor_failed"
 HLS_UNAVAILABLE: Code = "hls_unavailable"
@@ -30,6 +37,7 @@ CONVERSATION_NOT_FOUND: Code = "conversation_not_found"
 GROUP_EXISTS: Code = "group_exists"
 MESSAGE_NOT_FOUND: Code = "message_not_found"
 NOT_A_MEMBER: Code = "not_a_member"
+INTERNAL_ERROR: Code = "internal_error"
 INTERRUPTED: Code = "interrupted"
 INVALID_ENVIRONMENT: Code = "invalid_environment"
 NOT_IN_SESSION: Code = "not_in_session"
@@ -48,6 +56,9 @@ INTERRUPTED_EXIT = 130
 
 EXIT_CODES: Mapping[Code, int] = MappingProxyType(
     {
+        ATTACHMENT_NOT_FOUND: NOT_FOUND_EXIT,
+        ATTACHMENT_MISSING: FAILURE_EXIT,
+        INVALID_CONFIG: USAGE_EXIT,
         BELLHOP_FAILED: FAILURE_EXIT,
         DOCTOR_FAILED: FAILURE_EXIT,
         HLS_UNAVAILABLE: HLS_UNAVAILABLE_EXIT,
@@ -57,6 +68,7 @@ EXIT_CODES: Mapping[Code, int] = MappingProxyType(
         GROUP_EXISTS: FAILURE_EXIT,
         MESSAGE_NOT_FOUND: NOT_FOUND_EXIT,
         NOT_A_MEMBER: NOT_FOUND_EXIT,
+        INTERNAL_ERROR: FAILURE_EXIT,
         INTERRUPTED: INTERRUPTED_EXIT,
         INVALID_ENVIRONMENT: FAILURE_EXIT,
         NOT_IN_SESSION: NOT_FOUND_EXIT,

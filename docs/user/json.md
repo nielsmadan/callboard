@@ -32,9 +32,9 @@ in this envelope too, whenever `--json` appears on the command line.
 | Exit | Meaning | `error.code` values |
 |---|---|---|
 | 0 | ok | — |
-| 1 | failure | `bellhop_failed`, `doctor_failed`, `group_exists`, `invalid_environment`, `schema_too_new`, `store_unavailable` |
-| 2 | usage | `usage` |
-| 3 | not found or ambiguous | `conversation_not_found`, `identity_ambiguous`, `identity_not_found`, `message_not_found`, `not_a_member`, `not_in_session`, `unknown_handle` |
+| 1 | failure | `attachment_missing`, `bellhop_failed`, `doctor_failed`, `group_exists`, `internal_error`, `invalid_environment`, `schema_too_new`, `store_unavailable` |
+| 2 | usage | `invalid_config`, `usage` |
+| 3 | not found or ambiguous | `attachment_not_found`, `conversation_not_found`, `identity_ambiguous`, `identity_not_found`, `message_not_found`, `not_a_member`, `not_in_session`, `unknown_handle` |
 | 4 | no usable route | — (reserved for ringing) |
 | 5 | hls unavailable | `hls_unavailable` |
 | 130 | interrupted | `interrupted` |
@@ -49,6 +49,12 @@ in this envelope too, whenever `--json` appears on the command line.
 - `unknown_handle`: `--as`, `$CALLBOARD_AS`, a recipient or a group member names no participant.
 - `store_unavailable`: the store cannot be created, opened, written or migrated.
 - `schema_too_new`: the store was written by a newer callboard.
+- `internal_error`: an unexpected failure; the message names the Python exception. Please report
+  it.
+- `invalid_config`: `config.toml` cannot be parsed or has an invalid value.
+- `attachment_missing`: an attachment row exists but its file is gone from `attachments/`.
+- An `--attach` path that is missing, not a regular file, unreadable or over the size limit is
+  `usage` (exit 2), and nothing is stored.
 
 ## Shared objects
 
@@ -70,11 +76,16 @@ A message:
   "sender": "niels",
   "body": "on it",
   "parent_id": "cb_000000000002",
-  "created_at": "2026-11-14T09:00:00Z"
+  "created_at": "2026-11-14T09:00:00Z",
+  "attachments": [
+    {"id": "at_3c0d9e1f2a4b", "filename": "pixel.png", "media_type": "image/png", "size": 70,
+     "path": "/home/u/.local/share/callboard/attachments/5f0c…"}
+  ]
 }
 ```
 
-`conversation_id` is `dm:<a>:<b>` (handles sorted), `group:<name>` or `mail:<id>`.
+`attachments` lists the files sent with the message, in the order given; `path` is the stored
+copy, which `callboard attachment get` also prints. `conversation_id` is `dm:<a>:<b>` (handles sorted), `group:<name>` or `mail:<id>`.
 
 A conversation, as listed by `inbox`:
 
@@ -110,10 +121,33 @@ by handle.
 }
 ```
 
+With `--prune`, the object also has
+`"pruned": {"blobs": 1, "blob_bytes": 2304, "temp_files": 0, "wal_truncated": true}`, or
+`"pruned": null` when the store check is not `ok` and nothing was pruned.
+
 Each check's `status` is `ok`, `warn` or `fail`. When any check fails, the object is the error
 envelope (`doctor_failed`, exit 1) with `checks` and `unresolved` still present. A route resolves
 when it is a session id or agent name in `bellhop sessions --json`. A configured agent that is not
 running currently shows as unresolved.
+
+## `callboard dm|group send|mail send|mail reply … --json`
+
+```json
+{"schema_version": 1, "status": "ok", "warnings": [], "message": {
+  "id": "cb_000000000001", "conversation": "dm:enki:nanna", "sender": "enki",
+  "created_at": "2026-11-14T09:00:00Z", "parent_id": null,
+  "attachments": [{"id": "at_000000000002", "filename": "notes.txt", "media_type": "text/plain", "size": 6}],
+  "receipts": [{"recipient": "nanna", "ping": "idle", "ping_state": "pending", "bellhop_id": null,
+                "inline": false, "read_at": null}]
+}}
+```
+
+This describes the message just stored. `conversation` is the conversation id. `receipts` has
+one entry per recipient (never the sender), with the ping each one gets: `idle` for a direct
+message (`now` with `--now`, `none` with `--no-ping`); `idle` or `now` for mentioned group
+members and `none` for the rest; `hold` for mail (`idle` with `--urgent`). A recipient with no
+route always gets `none`. Problems while ringing will appear in `warnings`. The text output stays
+one line, `sent <id> to <ref>`.
 
 ## `callboard inbox --json`
 

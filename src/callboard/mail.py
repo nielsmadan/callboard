@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from callboard.conversations import members, require_member, require_participants
 from callboard.errors import CallboardError
 from callboard.messages import insert_message, message, route_of_handle
-from callboard.models import MemberRole, Message, Ping
+from callboard.models import Attachment, MemberRole, Message, Ping
 from callboard.receipts import insert_receipts, ping_for
 from callboard.store import write
 
@@ -38,6 +38,7 @@ def send_mail(
     draft: Message,
     subject: str,
     roles: dict[str, MemberRole],
+    attachments: Sequence[Attachment] = (),
     *,
     urgent: bool,
 ) -> Message:
@@ -55,12 +56,18 @@ def send_mail(
                 for handle, role in {draft.sender: "from", **roles}.items()
             ],
         )
-        insert_message(conn, draft)
+        insert_message(conn, draft, attachments)
         _ring_all(conn, draft, urgent=urgent)
     return draft
 
 
-def reply_mail(conn: sqlite3.Connection, draft: Message, *, urgent: bool) -> Message:
+def reply_mail(
+    conn: sqlite3.Connection,
+    draft: Message,
+    attachments: Sequence[Attachment] = (),
+    *,
+    urgent: bool,
+) -> Message:
     parent_id = draft.parent_id or ""
     with write(conn):
         parent = message(conn, parent_id)
@@ -72,6 +79,6 @@ def reply_mail(conn: sqlite3.Connection, draft: Message, *, urgent: bool) -> Mes
                 f"{parent_id} is not mail; reply with dm or group send", code="usage"
             )
         stored = Message(draft.id, thread.id, draft.sender, draft.body, parent_id, draft.created_at)
-        insert_message(conn, stored)
+        insert_message(conn, stored, attachments)
         _ring_all(conn, stored, urgent=urgent)
     return stored

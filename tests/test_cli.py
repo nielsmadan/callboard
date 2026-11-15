@@ -93,3 +93,24 @@ def test_stdin_is_read_unless_it_is_a_terminal(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(terminal, "isatty", lambda: True)
     monkeypatch.setattr(sys, "stdin", terminal)
     assert read_stdin() == ""
+
+
+def test_an_unexpected_failure_still_prints_one_envelope(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def broken(*_args: object) -> int:
+        raise OverflowError("int too large")
+
+    monkeypatch.setattr("callboard.cli.run", broken)
+    assert main(["history", "@x", "--json"]) == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": 1,
+        "status": "error",
+        "exit_code": 1,
+        "error": {
+            "code": "internal_error",
+            "message": "internal error: OverflowError: int too large",
+        },
+    }
+    assert main(["history", "@x"]) == 1
+    assert capsys.readouterr() == ("", "callboard: internal error: OverflowError: int too large\n")

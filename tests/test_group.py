@@ -41,6 +41,11 @@ def test_create_adds_the_creator_as_a_member(cb: Callboard) -> None:
     ]
 
 
+def test_repeated_members_flags_add_up(cb: Callboard) -> None:
+    result = cb("--as", "enki", "group", "create", "ops", "--members", "nanna", "--members", "utu")
+    assert result == (0, "created group:ops (members: enki, nanna, utu)\n", "")
+
+
 def test_create_twice_fails(cb: Callboard, ops: None) -> None:
     result = cb("--as", "nanna", "group", "create", "ops", "--members", "utu")
     assert result == (1, "", "callboard: group:ops already exists\n")
@@ -129,7 +134,14 @@ def test_group_text_comes_from_stdin_and_reply_to_stays_in_the_group(
         ("mail nanna@example.com or a.@nanna", ()),
         ("@nanna @nanna", ("nanna",)),
         ("@Nanna", ()),
+        ("@nanna- thanks", ("nanna",)),
+        ("@nanna_, ok", ("nanna",)),
+        ("@nannaX", ()),
+        ("@nAnna", ()),
+        ("@nanna@utu", ()),
+        ("@re-view-", ("re-view-",)),
+        ("@re-view- and @re-view", ("re-view-", "re-view")),
     ],
 )
 def test_mention_parsing(body: str, expected: tuple[str, ...]) -> None:
-    assert mentioned(body, {"enki", "nanna", "utu"}, "enki") == expected
+    assert mentioned(body, {"enki", "nanna", "utu", "re-view-", "re-view"}, "enki") == expected

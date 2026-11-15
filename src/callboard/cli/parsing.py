@@ -37,15 +37,21 @@ def build_parser() -> argparse.ArgumentParser:
         "doctor", parents=[_as_flag()], help="check the store, data directory and bellhop"
     )
     doctor.add_argument("--json", action="store_true", help="print one JSON object")
+    doctor.add_argument(
+        "--prune", action="store_true", help="remove unreferenced attachments; truncate the WAL"
+    )
     _add_chat(commands)
     _add_reading(commands)
     return parser
 
 
+MAX_LIMIT = 1_000_000
+
+
 def _positive(text: str) -> int:
-    value = int(text) if text.isdigit() else 0
-    if value < 1:
-        raise argparse.ArgumentTypeError(f"must be a positive integer, got '{text}'")
+    value = int(text) if text.isascii() and text.isdigit() else 0
+    if not 1 <= value <= MAX_LIMIT:
+        raise argparse.ArgumentTypeError(f"must be an integer from 1 to {MAX_LIMIT}, got '{text}'")
     return value
 
 
@@ -61,6 +67,10 @@ def _add_chat(commands: "argparse._SubParsersAction[_Parser]") -> None:
     ringing.add_argument("--now", action="store_true", help="ring as an interrupt")
     ringing.add_argument("--no-ping", action="store_true", help="store without ringing")
     dm.add_argument("--reply-to", metavar="MESSAGE", help="reply to a message in this chat")
+    dm.add_argument(
+        "--attach", action="append", default=[], metavar="PATH", help="attach a file; repeatable"
+    )
+    dm.add_argument("--json", action="store_true", help="print one JSON object")
     group = commands.add_parser(
         "group", parents=[_as_flag()], help="create, change and post to groups"
     )
@@ -68,7 +78,7 @@ def _add_chat(commands: "argparse._SubParsersAction[_Parser]") -> None:
     actions.required = True
     create = actions.add_parser("create", parents=[_as_flag()], help="create a group")
     create.add_argument("name")
-    create.add_argument("--members", type=_handles, required=True, metavar="A,B,C")
+    create.add_argument("--members", type=_handles, action="extend", required=True, metavar="A,B,C")
     create.add_argument("--project", metavar="P")
     for action, verb in (("add", "add a member"), ("remove", "remove a member")):
         change = actions.add_parser(action, parents=[_as_flag()], help=verb)
@@ -81,6 +91,10 @@ def _add_chat(commands: "argparse._SubParsersAction[_Parser]") -> None:
     send.add_argument("text", nargs="?", metavar="TEXT", help="message text; stdin when omitted")
     send.add_argument("--now", action="store_true", help="ring mentioned members as an interrupt")
     send.add_argument("--reply-to", metavar="MESSAGE", help="reply to a message in this group")
+    send.add_argument(
+        "--attach", action="append", default=[], metavar="PATH", help="attach a file; repeatable"
+    )
+    send.add_argument("--json", action="store_true", help="print one JSON object")
     _add_mail(commands)
 
 
@@ -94,10 +108,18 @@ def _add_mail(commands: "argparse._SubParsersAction[_Parser]") -> None:
     send.add_argument("--subject", required=True, metavar="S")
     send.add_argument("text", nargs="?", metavar="TEXT", help="message text; stdin when omitted")
     send.add_argument("--urgent", action="store_true", help="ring recipients instead of holding")
+    send.add_argument(
+        "--attach", action="append", default=[], metavar="PATH", help="attach a file; repeatable"
+    )
+    send.add_argument("--json", action="store_true", help="print one JSON object")
     reply = actions.add_parser("reply", parents=[_as_flag()], help="reply to all in a thread")
     reply.add_argument("message_id", metavar="MESSAGE")
     reply.add_argument("text", nargs="?", metavar="TEXT", help="message text; stdin when omitted")
     reply.add_argument("--urgent", action="store_true", help="ring recipients instead of holding")
+    reply.add_argument(
+        "--attach", action="append", default=[], metavar="PATH", help="attach a file; repeatable"
+    )
+    reply.add_argument("--json", action="store_true", help="print one JSON object")
 
 
 def _add_reading(commands: "argparse._SubParsersAction[_Parser]") -> None:
@@ -122,6 +144,12 @@ def _add_reading(commands: "argparse._SubParsersAction[_Parser]") -> None:
     )
     receipts.add_argument("message_id", metavar="MESSAGE")
     receipts.add_argument("--json", action="store_true", help="print one JSON object")
+    attachment = commands.add_parser("attachment", parents=[_as_flag()], help="fetch attachments")
+    files = attachment.add_subparsers(dest="action", metavar="ACTION", parser_class=_Parser)
+    files.required = True
+    get = files.add_parser("get", parents=[_as_flag()], help="print the stored path or copy it")
+    get.add_argument("attachment_id", metavar="ATTACHMENT")
+    get.add_argument("--out", metavar="PATH", help="copy the file here instead")
 
 
 def parse(argv: Sequence[str]) -> argparse.Namespace:

@@ -78,3 +78,12 @@ class InboxEntry:
     unread: int
     mentions: int
     sender: str
+
+
+@dataclass(frozen=True)
+class Attachment:
+    id: str
+    sha256: str
+    filename: str
+    media_type: str
+    size: int

@@ -1,10 +1,21 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 
-from callboard.models import Conversation, InboxEntry, Message, Receipt
+from callboard.models import Attachment, Conversation, InboxEntry, Message, Receipt
 from callboard.refs import ref_of
 
 
-def message_json(item: Message) -> dict[str, object]:
+def attachment_json(item: Attachment, directory: Path) -> dict[str, object]:
+    return {
+        "id": item.id,
+        "filename": item.filename,
+        "media_type": item.media_type,
+        "size": item.size,
+        "path": str(directory / item.sha256),
+    }
+
+
+def message_json(item: Message, files: Sequence[Attachment], directory: Path) -> dict[str, object]:
     return {
         "id": item.id,
         "conversation_id": item.conversation_id,
@@ -12,20 +23,39 @@ def message_json(item: Message) -> dict[str, object]:
         "body": item.body,
         "parent_id": item.parent_id,
         "created_at": item.created_at,
+        "attachments": [attachment_json(file, directory) for file in files],
     }
 
 
-def message_lines(item: Message) -> list[str]:
+def attachment_line(item: Attachment, directory: Path) -> str:
+    return (
+        f"  attachment {item.id}  {item.filename}  {item.media_type}  {item.size} bytes"
+        f"  {directory / item.sha256}"
+    )
+
+
+def message_lines(item: Message, files: Sequence[Attachment], directory: Path) -> list[str]:
     reply = f" (reply to {item.parent_id})" if item.parent_id else ""
     first, *rest = item.body.split("\n")
     return [
         f"{item.id}  {item.created_at}  {item.sender}{reply}: {first}",
         *(f"  {line}" for line in rest),
+        *(attachment_line(file, directory) for file in files),
     ]
 
 
-def messages_lines(items: Sequence[Message]) -> list[str]:
-    return [line for item in items for line in message_lines(item)]
+def messages_json(
+    items: Sequence[Message], files: Mapping[str, Sequence[Attachment]], directory: Path
+) -> list[dict[str, object]]:
+    return [message_json(item, files.get(item.id, ()), directory) for item in items]
+
+
+def messages_lines(
+    items: Sequence[Message], files: Mapping[str, Sequence[Attachment]], directory: Path
+) -> list[str]:
+    return [
+        line for item in items for line in message_lines(item, files.get(item.id, ()), directory)
+    ]
 
 
 def conversation_json(found: Conversation, caller: str) -> dict[str, object]:

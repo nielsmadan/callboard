@@ -11,17 +11,18 @@ Status: pre-release, under construction.
 ```
 callboard join <handle> [--human]                 # join as <handle> from this agent session
 callboard who [--json]                            # list participants
-callboard dm <to> [TEXT] [--now] [--no-ping] [--reply-to MESSAGE]
+callboard dm <to> [TEXT] [--attach PATH]... [--now] [--no-ping] [--reply-to MESSAGE] [--json]
 callboard group create <name> --members a,b,c [--project P]
 callboard group add|remove <name> <handle>
-callboard group send <name> [TEXT] [--now] [--reply-to MESSAGE]
-callboard mail send --to a[,b] [--cc c[,d]] --subject S [TEXT] [--urgent]
-callboard mail reply <message-id> [TEXT] [--urgent]   # to everyone in the thread but you
+callboard group send <name> [TEXT] [--attach PATH]... [--now] [--reply-to MESSAGE] [--json]
+callboard mail send --to a[,b] [--cc c[,d]] --subject S [TEXT] [--attach PATH]... [--urgent] [--json]
+callboard mail reply <message-id> [TEXT] [--attach PATH]... [--urgent] [--json]   # to everyone in the thread but you
 callboard inbox [--json]                          # unread counts, mentions first
 callboard read <ref> [--peek] [--json]            # print unread and mark it read
 callboard history <ref> [--limit N] [--json]
 callboard receipts <message-id> [--json]
-callboard doctor [--json]                         # check the store, data directory, bellhop and routes
+callboard attachment get <attachment-id> [--out PATH]   # print the stored path, or copy it
+callboard doctor [--prune] [--json]               # check the store, data directory, bellhop and routes
 callboard --version
 ```
 
@@ -44,7 +45,16 @@ The `--json` contract and the error codes are in [docs/user/json.md](docs/user/j
 Messages are unauthenticated: everything runs as one local user and sender names are
 self-asserted.
 
-Data lives in `$XDG_DATA_HOME/callboard` (default `~/.local/share/callboard`).
+Data lives in `$XDG_DATA_HOME/callboard` (default `~/.local/share/callboard`). Attachments are
+copied into `attachments/<sha256>` there, each content stored once. `doctor --prune` removes
+attachment files no message references (older than an hour, so sends in flight are safe) and
+truncates the SQLite write-ahead log.
+
+Configuration is optional, in `$XDG_CONFIG_HOME/callboard/config.toml`:
+
+```toml
+max_attachment_bytes = 52428800   # per file; default 50 MiB
+```
 
 ## License
 

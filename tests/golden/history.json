@@ -10,7 +10,8 @@
       "sender": "enki",
       "body": "@nanna please review",
       "parent_id": null,
-      "created_at": "2026-11-14T09:00:00Z"
+      "created_at": "2026-11-14T09:00:00Z",
+      "attachments": []
     },
     {
       "id": "cb_000000000003",
@@ -18,7 +19,8 @@
       "sender": "niels",
       "body": "on it",
       "parent_id": "cb_000000000002",
-      "created_at": "2026-11-14T09:00:00Z"
+      "created_at": "2026-11-14T09:00:00Z",
+      "attachments": []
     }
   ]
 }
