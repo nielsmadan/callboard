@@ -31,6 +31,10 @@ the store owns SQL; identity owns calls to `bellhop`.
 
 Only SQL runs inside a write transaction: never a subprocess, a push or a file copy.
 
+`trace` appends one JSON line per command (`cli/dispatch`) and per sent message (`cli/chat`) to
+`trace.jsonl` in the data directory; `Runtime.trace` carries the emitter (`quiet` in tests) and an
+emit never raises. `callboard log` reads it. What a ring did is in bellhop's trace.
+
 ## Conventions
 
 - Target Python 3.13, standard library only at runtime, Ruff at 100 columns, strict mypy over

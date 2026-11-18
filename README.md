@@ -48,6 +48,7 @@ callboard history <ref> [--limit N] [--json]
 callboard receipts <message-id> [--json]
 callboard attachment get <attachment-id> [--out PATH] [--json]   # print the stored path, or copy it
 callboard doctor [--reping] [--prune] [--json]    # check the store, data directory, bellhop, routes and config
+callboard log [TEXT...] [-n N] [--errors] [--json] # what callboard did lately, from its trace file
 callboard --version
 ```
 

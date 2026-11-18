@@ -60,10 +60,20 @@ def _after_commit(
     stored: Message,
     files: Sequence[Attachment],
     bell: Caller,
-    now: str,
+    runtime: Runtime,
 ) -> tuple[list[str], list[Receipt]]:
     try:
-        return ring(conn, stored.id, bell, now), receipts_of(conn, stored.id)
+        warnings = ring(conn, stored.id, bell, runtime.clock())
+        receipts = receipts_of(conn, stored.id)
+        runtime.trace(
+            "sent",
+            message=stored.id,
+            conversation=stored.conversation_id,
+            sender=stored.sender,
+            receipts=[receipt_json(receipt) for receipt in receipts],
+            warnings=warnings or None,
+        )
+        return warnings, receipts
     except (sqlite3.Error, OSError) as error:
         raise CallboardError(
             f"stored {stored.id}, then failed: {error}",
@@ -112,10 +122,9 @@ def dm(args: argparse.Namespace, runtime: Runtime) -> int:
         draft = _draft("", caller.handle, body, args.reply_to, runtime)
         files = attach(args.attach, runtime, config)
         stored = send_direct(conn, draft, recipient, files, rings=not args.no_ping, now=args.now)
-        warnings, receipts = _after_commit(
-            conn, stored, files, resumed(bell, paused), runtime.clock()
-        )
-    return _report(args, stored, files, receipts, warnings, f"sent {stored.id} to @{recipient}")
+        warnings, receipts = _after_commit(conn, stored, files, resumed(bell, paused), runtime)
+    line = f"sent {stored.id} to @{recipient}"
+    return _report(args, stored, files, receipts, warnings, line)
 
 
 def _group_send(args: argparse.Namespace, runtime: Runtime) -> int:
@@ -129,9 +138,7 @@ def _group_send(args: argparse.Namespace, runtime: Runtime) -> int:
         draft = _draft(f"group:{name}", caller.handle, body, args.reply_to, runtime)
         files = attach(args.attach, runtime, config)
         stored, tagged = send_group(conn, draft, files, now=args.now)
-        warnings, receipts = _after_commit(
-            conn, stored, files, resumed(bell, paused), runtime.clock()
-        )
+        warnings, receipts = _after_commit(conn, stored, files, resumed(bell, paused), runtime)
     mentions = f" (mentions {', '.join(f'@{handle}' for handle in tagged)})" if tagged else ""
     line = f"sent {stored.id} to {ref_of(stored.conversation_id, caller.handle)}{mentions}"
     return _report(args, stored, files, receipts, warnings, line)
@@ -208,12 +215,9 @@ def _mail_send(args: argparse.Namespace, runtime: Runtime) -> int:
         require_participants(conn, sorted(roles))
         files = attach(args.attach, runtime, config)
         stored = send_mail(conn, draft, subject, roles, files, urgent=args.urgent)
-        warnings, receipts = _after_commit(
-            conn, stored, files, resumed(bell, paused), runtime.clock()
-        )
-    return _report(
-        args, stored, files, receipts, warnings, f"sent {stored.id} to {stored.conversation_id}"
-    )
+        warnings, receipts = _after_commit(conn, stored, files, resumed(bell, paused), runtime)
+    line = f"sent {stored.id} to {stored.conversation_id}"
+    return _report(args, stored, files, receipts, warnings, line)
 
 
 def _mail_reply(args: argparse.Namespace, runtime: Runtime) -> int:
@@ -226,12 +230,9 @@ def _mail_reply(args: argparse.Namespace, runtime: Runtime) -> int:
         draft = _draft("", caller.handle, body, args.message_id, runtime)
         files = attach(args.attach, runtime, config)
         stored = reply_mail(conn, draft, files, urgent=args.urgent)
-        warnings, receipts = _after_commit(
-            conn, stored, files, resumed(bell, paused), runtime.clock()
-        )
-    return _report(
-        args, stored, files, receipts, warnings, f"sent {stored.id} to {stored.conversation_id}"
-    )
+        warnings, receipts = _after_commit(conn, stored, files, resumed(bell, paused), runtime)
+    line = f"sent {stored.id} to {stored.conversation_id}"
+    return _report(args, stored, files, receipts, warnings, line)
 
 
 MAIL_ACTIONS = {"reply": _mail_reply, "send": _mail_send}

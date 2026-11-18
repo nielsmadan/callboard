@@ -46,6 +46,20 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument(
         "--prune", action="store_true", help="remove unreferenced attachments; truncate the WAL"
     )
+    log = commands.add_parser("log", help="show what callboard did lately, from its trace file")
+    log.add_argument(
+        "words",
+        nargs="*",
+        metavar="TEXT",
+        help="show only events that contain every TEXT, such as a message id or a handle",
+    )
+    log.add_argument(
+        "-n", "--lines", type=_positive, default=40, metavar="N", help="how many events"
+    )
+    log.add_argument(
+        "--errors", action="store_true", help="show only what failed or rang with a warning"
+    )
+    log.add_argument("--json", action="store_true", help="print one JSON object")
     _add_chat(commands)
     _add_reading(commands)
     return parser

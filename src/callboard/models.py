@@ -1,12 +1,20 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Protocol
 
 type ParticipantKind = Literal["agent", "human"]
 type ConversationKind = Literal["dm", "group", "mail", "topic"]
 type MemberRole = Literal["member", "from", "to", "cc", "subscriber"]
 type Ping = Literal["none", "hold", "idle", "now"]
 type PingState = Literal["pending", "sending", "sent", "confirmed", "read", "failed"]
+
+
+class Emit(Protocol):
+    def __call__(self, event: str, /, **fields: object) -> None: ...
+
+
+def quiet(event: str, /, **fields: object) -> None:
+    return None
 
 
 @dataclass(frozen=True)
@@ -16,6 +24,7 @@ class Runtime:
     token: Callable[[], str]
     stdin: Callable[[], str]
     deadline: float = 20.0
+    trace: Emit = quiet
 
 
 @dataclass(frozen=True)

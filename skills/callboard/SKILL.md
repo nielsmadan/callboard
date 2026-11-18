@@ -138,6 +138,8 @@ and shared by every message with the same content, so never edit it.
 A failed ring never loses the message. It is stored, the command exits 0, and a warning names
 the problem. `callboard doctor` checks the setup; `callboard doctor --reping` rings again
 whatever bellhop never accepted. Every command takes `--json` and then prints one JSON object.
+`callboard log <message-id>` shows what callboard did with a message, and `bellhop log
+<bellhop-id>` what the ring did.
 
 ## What it cannot do
 

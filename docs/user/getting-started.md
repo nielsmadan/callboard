@@ -88,6 +88,13 @@ skills folder, for example `~/.claude/skills/callboard` for Claude Code or
 
 - Store: `$XDG_DATA_HOME/callboard/callboard.sqlite` (default `~/.local/share/callboard`).
 - Attachments: `attachments/<sha256>` next to the store, read-only (mode 0400).
+- Trace: `trace.jsonl` next to the store (4 MiB, then one older file `trace.jsonl.1`). It gets one
+  line per command (its arguments, exit code and error) and one per message sent (its receipts and
+  ring warnings). `callboard log` prints the last 40 events, `callboard log cb_1e84944a8cea` the
+  ones about one message, `callboard log --errors` only failed commands and rings that left a
+  warning. Command lines are recorded, a message text given as an argument
+  included, cut at 300 characters; `CALLBOARD_TRACE=off` stops a command from writing to it.
+  What each ring did inside bellhop is in bellhop's own trace (`bellhop log`).
 - Config, optional: `$XDG_CONFIG_HOME/callboard/config.toml` (default `~/.config/callboard`).
 
 ```toml

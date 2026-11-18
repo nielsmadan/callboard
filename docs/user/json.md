@@ -153,6 +153,27 @@ last member left.
 `attachment` is the shared attachment object. `out` is the absolute path the `--out` copy was
 written to, or `null` without `--out`.
 
+## `callboard log --json`
+
+```json
+{"schema_version": 1, "status": "ok", "warnings": [],
+ "file": "/home/u/.local/share/callboard/trace.jsonl",
+ "events": [
+   {"at": "2026-11-15T15:27:43.781Z", "pid": 59960, "event": "sent", "message": "cb_000000000001",
+    "conversation": "dm:enki:nanna", "sender": "enki",
+    "receipts": [{"recipient": "nanna", "ping": "idle", "ping_state": "pending",
+                  "bellhop_id": "bh_000000000001", "inline": true, "read_at": null}]},
+   {"at": "2026-11-15T15:27:43.782Z", "pid": 59960, "event": "command",
+    "argv": ["--as", "enki", "dm", "nanna", "hello", "--json"], "cwd": "/work", "exit": 0, "ms": 40}
+ ]}
+```
+
+`events` holds the last N (`-n`, default 40) trace events that contain every TEXT, oldest first.
+A `command` event has `argv`, `cwd`, `as` (`$CALLBOARD_AS` when set), `exit`, `code` and `error`
+when it failed, and `ms`. A `sent` event has `message`, `conversation`, `sender`, `receipts` (the
+shared receipt objects as they stood after the ring) and `warnings`. An empty field is left out.
+The fields are for people and may grow. `log` itself is not recorded.
+
 ## `callboard doctor --json`
 
 ```json

@@ -12,7 +12,7 @@ LAYERS: tuple[tuple[str, ...], ...] = (
     ("__init__", "codes", "mentions", "text"),
     ("errors", "models"),
     ("paths", "jsonout", "refs", "config", "bellhop_client"),
-    ("store",),
+    ("store", "trace"),
     ("identity", "conversations"),
     ("receipts", "attachments"),
     ("messages",),
@@ -39,6 +39,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "bellhop_client": frozenset({"codes", "errors", "models", "text"}),
     "attachments": frozenset({"errors", "models"}),
     "store": frozenset({"errors", "models"}),
+    "trace": frozenset({"models", "paths"}),
     "identity": frozenset({"bellhop_client", "errors", "models", "store"}),
     "conversations": frozenset({"errors", "models", "refs", "store"}),
     "receipts": frozenset({"conversations", "models"}),
@@ -66,6 +67,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
             "refs",
             "store",
             "text",
+            "trace",
         }
     ),
     "__main__": frozenset({"cli"}),
@@ -79,9 +81,12 @@ SIBLING_IMPORTS_ALLOWED: Mapping[str, Mapping[str, frozenset[str]]] = {
         "context": frozenset(),
         "commands": frozenset({"context", "presentation"}),
         "doctor": frozenset({"presentation"}),
+        "log": frozenset({"presentation"}),
         "chat": frozenset({"context", "presentation", "rendering"}),
         "reading": frozenset({"context", "presentation", "rendering"}),
-        "dispatch": frozenset({"chat", "commands", "doctor", "parsing", "presentation", "reading"}),
+        "dispatch": frozenset(
+            {"chat", "commands", "doctor", "log", "parsing", "presentation", "reading"}
+        ),
         "__init__": frozenset({"dispatch", "parsing", "presentation"}),
     },
 }

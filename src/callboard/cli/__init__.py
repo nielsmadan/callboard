@@ -10,6 +10,7 @@ from callboard.cli.presentation import report_error, silence_stdout
 from callboard.codes import FAILURE_EXIT
 from callboard.errors import CallboardError
 from callboard.models import Runtime
+from callboard.trace import tracer
 
 
 def utc_now() -> str:
@@ -27,7 +28,7 @@ def read_stdin() -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    runtime = Runtime(os.environ, utc_now, random_token, read_stdin)
+    runtime = Runtime(os.environ, utc_now, random_token, read_stdin, trace=tracer(os.environ))
     arguments = list(sys.argv[1:] if argv is None else argv)
     try:
         exit_code = run(arguments, runtime)
