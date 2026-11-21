@@ -68,5 +68,9 @@ install-editable:
 uninstall:
     @uv tool uninstall callboard
 
+[positional-arguments]
+app *args:
+    @cd app && just "$@"
+
 clean:
     @rm -rf dist build .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage coverage.xml

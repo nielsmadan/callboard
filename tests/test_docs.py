@@ -8,7 +8,12 @@ from callboard.cli.parsing import parse
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "callboard" / "SKILL.md"
-DOCUMENTS = [ROOT / "README.md", SKILL, *sorted((ROOT / "docs" / "user").glob("*.md"))]
+DOCUMENTS = [
+    ROOT / "README.md",
+    ROOT / "docs" / "app.md",
+    SKILL,
+    *sorted((ROOT / "docs" / "user").glob("*.md")),
+]
 SHELL_OPERATORS = {"<", ">", "|", "2>&1", "&&"}
 
 

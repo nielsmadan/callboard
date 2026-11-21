@@ -28,10 +28,11 @@ from callboard.cli.admin import (
     text_formats,
 )
 from callboard.errors import CallboardError
-from callboard.observe import MAX_BATCH, MAX_BATCH_BODY_CHARS, batch, fingerprint
+from callboard.models import ADMIN_BODY_LIMIT
+from callboard.observe import MAX_BATCH, MAX_BODY_BYTES, batch, fingerprint
 from callboard.paths import attachments_dir, store_path
 from callboard.store import open_readonly
-from helpers import CLOCK, Callboard, FakeBellhop, chat_scenario, seed
+from helpers import CLOCK, Callboard, FakeBellhop, chat_scenario, load_golden, seed
 
 type Step = Callable[[], None]
 type Opener = Callable[[Path], sqlite3.Connection | None]
@@ -116,20 +117,20 @@ def seqs(events: list[dict[str, Any]]) -> list[list[int]]:
     ]
 
 
-def busy_error() -> sqlite3.OperationalError:
+def busy_error(code: int = sqlite3.SQLITE_BUSY) -> sqlite3.OperationalError:
     error = sqlite3.OperationalError("database is locked")
-    error.sqlite_errorcode = sqlite3.SQLITE_BUSY
+    error.sqlite_errorcode = code
     return error
 
 
-def busy_store(failures: int) -> Opener:
+def busy_store(failures: int, code: int = sqlite3.SQLITE_BUSY) -> Opener:
     remaining = [failures]
 
     class Busy(sqlite3.Connection):
         def execute(self, sql: str, parameters: Any = (), /) -> sqlite3.Cursor:
             if sql == "BEGIN" and remaining[0] > 0:
                 remaining[0] -= 1
-                raise busy_error()
+                raise busy_error(code)
             return super().execute(sql, parameters)
 
     def open_store(path: Path) -> sqlite3.Connection:
@@ -170,22 +171,27 @@ def test_batch_stops_at_the_message_cap() -> None:
 
 
 @pytest.mark.usefixtures("scenario")
-def test_batch_stops_at_the_body_cap_but_always_takes_one_message() -> None:
-    third = MAX_BATCH_BODY_CHARS // 3 + 1
-    insert("group:ops", "enki", ["a" * third, "b" * third, "c" * third])
-    insert("group:ops", "enki", ["d" * (MAX_BATCH_BODY_CHARS + 1)])
+def test_batch_cap_counts_the_bodies_as_emitted_after_the_cut() -> None:
+    per_body = ADMIN_BODY_LIMIT + 2
+    fits = MAX_BODY_BYTES // per_body
+    insert("group:ops", "enki", ["a" * (ADMIN_BODY_LIMIT * 16)] * (fits + 1))
     with opened() as conn:
-        sizes = []
-        cursor = 3
-        for _ in range(3):
-            found, _ = batch(conn, cursor)
-            sizes.append(([len(item.message.body) for item in found.messages], found.full))
-            cursor = found.cursor
-    assert sizes == [
-        ([third, third], True),
-        ([third], True),
-        ([MAX_BATCH_BODY_CHARS + 1], False),
-    ]
+        first, _ = batch(conn, 3)
+        rest, _ = batch(conn, first.cursor)
+    assert (len(first.messages), first.full) == (fits, True)
+    assert (len(rest.messages), rest.full) == (1, False)
+
+
+@pytest.mark.usefixtures("scenario")
+def test_the_body_cap_counts_escaped_bytes() -> None:
+    escaped = "\x01" * ADMIN_BODY_LIMIT
+    fits = MAX_BODY_BYTES // (6 * ADMIN_BODY_LIMIT + 2)
+    insert("group:ops", "enki", [escaped] * (fits + 1))
+    with opened() as conn:
+        first, _ = batch(conn, 3)
+        rest, _ = batch(conn, first.cursor)
+    assert (len(first.messages), first.full) == (fits, True)
+    assert (len(rest.messages), rest.full) == (1, False)
 
 
 def fingerprint_now() -> str:
@@ -258,6 +264,15 @@ def test_messages_committed_between_waits_arrive_once(cb: Callboard) -> None:
 
 
 @pytest.mark.usefixtures("scenario")
+def test_watch_lines_match_the_goldens(cb: Callboard) -> None:
+    reply = ("--as", "nanna", "group", "send", "ops", "lgtm", "--reply-to", "cb_000000000003")
+    events, _ = watched(ok(cb, *reply))
+    snapshot = load_golden("admin-watch-snapshot.json")
+    assert isinstance(snapshot, dict)
+    assert events == [{**snapshot, "store": str(store())}, load_golden("admin-watch-messages.json")]
+
+
+@pytest.mark.usefixtures("scenario")
 def test_a_membership_change_emits_a_snapshot(cb: Callboard) -> None:
     seed(("utu", None))
     events, _ = watched(ok(cb, "--as", "enki", "group", "add", "ops", "utu"))
@@ -303,12 +318,21 @@ def test_a_replaced_store_emits_a_fresh_snapshot(cb: Callboard) -> None:
 
 
 @pytest.mark.usefixtures("scenario")
-def test_a_busy_store_is_retried(cb: Callboard) -> None:
+@pytest.mark.parametrize(
+    "code",
+    [
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+        sqlite3.SQLITE_BUSY_RECOVERY,
+        sqlite3.SQLITE_BUSY_SNAPSHOT,
+    ],
+)
+def test_a_busy_store_is_retried(cb: Callboard, code: int) -> None:
     nothing: Step = lambda: None  # noqa: E731
     events, script = watched(
         *[nothing] * 3,
         ok(cb, "--as", "nanna", "group", "send", "ops", "lgtm"),
-        open_store=busy_store(3),
+        open_store=busy_store(3, code),
     )
     assert [event["event"] for event in events] == ["snapshot", "messages"]
     assert seqs(events) == [[4]]

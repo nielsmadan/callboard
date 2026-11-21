@@ -107,8 +107,7 @@ def _interval(text: str) -> float:
     return value
 
 
-def _positive(text: str) -> int:
-    return _within(MAX_LIMIT)(text)
+_positive = _within(MAX_LIMIT)
 
 
 def _handles(text: str) -> list[str]:

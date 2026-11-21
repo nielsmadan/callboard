@@ -136,8 +136,8 @@ for a new one. `displaced` lists other handles this session held, which lose the
 {"schema_version": 1, "status": "ok", "warnings": [], "conversation": "group:release", "handle": "niels", "group_deleted": false}
 ```
 
-A top-level `conversation` is always a conversation id string, as in the send output below;
-message objects name the same id `conversation_id`. `create` returns the group's name, project
+A top-level `conversation` is a conversation id string, as in the send output below (only
+`admin history` puts a whole summary there); message objects name the same id `conversation_id`. `create` returns the group's name, project
 and sorted members. `add` says whether the handle was added
 (`false` when it was already a member). `remove` says whether the group was deleted because its
 last member left.
@@ -367,7 +367,8 @@ by their latest message, newest first, then those without messages by id.
 
 `conversation` is the summary `admin conversations` lists. `messages` are the latest `--limit`
 messages (default 50, 1 to 500) with a `seq` below `--before`, oldest first: the shared message
-object plus `seq` and `body_truncated`. A body longer than 65,536 characters is cut to that length
+object plus `seq` and `body_truncated`. A page stops early once its bodies, cut as below, pass
+4,000,000 bytes as JSON, but always holds the latest message. A body longer than 65,536 characters is cut to that length
 and has `body_truncated` true. `more` is true when older messages exist before `messages[0]`.
 An unknown conversation id, or a missing store, is `conversation_not_found` (exit 3).
 
@@ -406,8 +407,9 @@ An unknown conversation id, or a missing store, is `conversation_not_found` (exi
   conversations. A fresh snapshot follows whenever a conversation is created or dropped, its
   members change, or the store file appears, disappears or is replaced. It covers the messages
   read with it, which do not appear in a `messages` line.
-- A `messages` line has 1 to 200 new messages, oldest first, with at most 4,000,000 characters of
-  bodies between them. Each is the message object of `admin history`. `cursor` is the `seq` of
+- A `messages` line has 1 to 200 new messages, oldest first, whose bodies, cut to 65,536
+  characters as in `admin history`, come to at most 4,000,000 bytes as JSON. Each is the
+  message object of `admin history`. `cursor` is the `seq` of
   the last one. `conversations` holds the summaries of the conversations those messages belong
   to, as they stand after the last one, newest first.
 - The stream ends with exit 0 when standard input closes. A store that stays busy (locked) for

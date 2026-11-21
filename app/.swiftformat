@@ -1,0 +1,11 @@
+--indent 4
+--indentcase false
+--trimwhitespace always
+--voidtype void
+--semicolons inline
+--swiftversion 5.9
+--maxwidth 120
+--commas inline
+--disable wrapMultilineStatementBraces
+--exclude build,.build,CallboardKit/.build
+--disable wrapIfStatementBodies,wrapIfExpressionBodies,wrapPropertyBodies,wrapFunctionBodies,docComments,noForceUnwrapInTests,noForceTryInTests,repeatedGuard,nestedIf,contentBuilder,redundantAsync,redundantThrows

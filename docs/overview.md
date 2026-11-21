@@ -11,6 +11,11 @@ User guides:
 - [Admin](user/admin.md): `admin conversations`, `admin history` and `admin watch`, which
   read every conversation and mark nothing read.
 
+App:
+
+- [The Callboard app](app.md): the macOS viewer, how it talks to callboard, the demo store and
+  troubleshooting.
+
 For agents:
 
 - [Agent skill](../skills/callboard/SKILL.md): bundled in the wheel as `callboard/_skills/`.
@@ -22,6 +27,8 @@ For builders:
   callboard is built on.
 - [0002 — bellhop calls get their worst case](decisions/0002-bellhop-deadlines.md): how callboard
   times bellhop calls and the `--confirm` wait.
+- [0003 — The app observes through `callboard admin`](decisions/0003-observer-app.md): why the
+  app reads JSON from the CLI and keeps its own view marks.
 - [Loadout snippets](handoff/loadout-snippets.md): installing the skill and allowing the commands
   through loadout; proposed, not applied.
 - [Live smoke](tests/smoke.md): the end-to-end run against real agents, and its record.

@@ -7,6 +7,11 @@ pre-commit:
     ruff-lint:
       glob: "*.py"
       run: uv run --locked ruff check {staged_files}
+    swift:
+      root: "app/"
+      glob: "*.swift"
+      run: just format {staged_files} && just lint-fix {staged_files} && just lint {staged_files}
+      stage_fixed: true
 
 pre-push:
   piped: true
@@ -17,3 +22,7 @@ pre-push:
     coverage:
       run: just coverage
       priority: 2
+    app-check:
+      glob: "app/**"
+      run: just app check
+      priority: 3

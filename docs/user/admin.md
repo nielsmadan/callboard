@@ -2,8 +2,8 @@
 
 The `admin` commands read every conversation in the store, whoever its members are. They are for
 a person looking over all of callboard (the Callboard app uses them) and are left out of
-callboard's own help. They only read: nothing is marked read, no receipt changes, and a missing
-store is not created.
+callboard's own help. They only read the store: nothing is marked read, no receipt changes, and a
+missing store is not created. Like every command, each run appends a line to `trace.jsonl`.
 
 The admin commands act as nobody, so they refuse `--as` (exit 2).
 
@@ -35,7 +35,7 @@ $ callboard admin history group:ops --limit 2 --before 4
 - `history` takes a conversation id as `admin conversations` prints it: `dm:<a>:<b>`,
   `group:<name>` or `mail:<id>`. An unknown id exits 3.
 - It prints the latest `--limit` messages (default 50, at most 500) oldest first, each prefixed
-  with its `seq`, the store-wide message number.
+  with its `seq`, the store-wide message number. It prints fewer once their bodies pass 4 MB.
 - `--before SEQ` pages back to the messages before that `seq`. While older messages remain, the
   last line names the command that shows them.
 
@@ -59,8 +59,9 @@ watching /home/u/.local/share/callboard/callboard.sqlite: 3 conversations, curso
 - It looks for changes every `--interval` seconds (default 0.25, from 0.05 to 10). A missing store
   is watched until it appears.
 - It runs until its standard input closes (exit 0) or Ctrl-C (exit 130). A terminal's standard
-  input never closes, so Ctrl-D does not stop it. A store that stays busy for 30 seconds, or one
-  written by a newer callboard, ends it with exit 1.
+  input never closes, so Ctrl-D does not stop it. Standard input that is already at its end
+  (`</dev/null`, a cron job) stops it right after the first snapshot. A store that stays busy
+  for 30 seconds, or one written by a newer callboard, ends it with exit 1.
 
 ## JSON
 

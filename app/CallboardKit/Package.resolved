@@ -1,0 +1,33 @@
+{
+  "originHash" : "e06038a9f0bfb7c64a993f2db15e98efb4e3f08cb8a2587c1b82d9527e6991cb",
+  "pins" : [
+    {
+      "identity" : "shortcutfield",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nielsmadan/ShortcutField",
+      "state" : {
+        "revision" : "c6ce024022d387cfe652d8c9a81df42a9e78648f",
+        "version" : "2.5.0"
+      }
+    },
+    {
+      "identity" : "shortcutkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nielsmadan/ShortcutKit",
+      "state" : {
+        "revision" : "e5e360e3cef6e1016f477983226c445d108d2643",
+        "version" : "0.8.0"
+      }
+    },
+    {
+      "identity" : "tomlkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/LebJe/TOMLKit",
+      "state" : {
+        "revision" : "ec6198d37d495efc6acd4dffbd262cdca7ff9b3f",
+        "version" : "0.6.0"
+      }
+    }
+  ],
+  "version" : 3
+}

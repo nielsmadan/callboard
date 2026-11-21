@@ -7,6 +7,7 @@ from callboard.attachments import attachments_of
 from callboard.conversations import conversation, conversation_of
 from callboard.messages import message_of
 from callboard.models import (
+    ADMIN_BODY_LIMIT,
     Batch,
     Conversation,
     ConversationSummary,
@@ -17,7 +18,7 @@ from callboard.models import (
 from callboard.store import read_transaction
 
 MAX_BATCH = 200
-MAX_BATCH_BODY_CHARS = 4_000_000
+MAX_BODY_BYTES = 4_000_000
 
 
 def _cursor(conn: sqlite3.Connection) -> int:
@@ -92,7 +93,7 @@ def snapshot_with_fingerprint(conn: sqlite3.Connection) -> tuple[Snapshot, str]:
 
 
 def page(
-    conn: sqlite3.Connection, conversation_id: str, before: int | None, limit: int
+    conn: sqlite3.Connection, conversation_id: str, *, before: int | None, limit: int
 ) -> Page | None:
     with read_transaction(conn):
         found = conversation(conn, conversation_id)
@@ -100,11 +101,11 @@ def page(
             return None
         summary = _summaries(conn, [found])[0]
         rows = conn.execute(
-            "SELECT * FROM (SELECT * FROM messages WHERE conversation_id = ?"
-            " AND (? IS NULL OR seq < ?) ORDER BY seq DESC LIMIT ?) ORDER BY seq",
+            "SELECT * FROM messages WHERE conversation_id = ?"
+            " AND (? IS NULL OR seq < ?) ORDER BY seq DESC LIMIT ?",
             (conversation_id, before, before, limit),
-        )
-        items = tuple(_sequenced(row) for row in rows)
+        ).fetchall()
+        items = tuple(_sequenced(row) for row in reversed(_capped(rows)))
         more = bool(items) and bool(
             conn.execute(
                 "SELECT EXISTS (SELECT 1 FROM messages WHERE conversation_id = ? AND seq < ?)",
@@ -131,12 +132,16 @@ def fingerprint(conn: sqlite3.Connection) -> str:
         return _fingerprint(conn)
 
 
+def _encoded_size(body: str) -> int:
+    return len(json.dumps(body[:ADMIN_BODY_LIMIT], ensure_ascii=False).encode())
+
+
 def _capped(rows: Sequence[sqlite3.Row]) -> list[sqlite3.Row]:
     taken: list[sqlite3.Row] = []
-    chars = 0
-    for row in rows[:MAX_BATCH]:
-        chars += len(row["body"])
-        if taken and chars > MAX_BATCH_BODY_CHARS:
+    size = 0
+    for row in rows:
+        size += _encoded_size(row["body"])
+        if taken and size > MAX_BODY_BYTES:
             break
         taken.append(row)
     return taken
@@ -147,7 +152,7 @@ def batch(conn: sqlite3.Connection, cursor: int) -> tuple[Batch, str]:
         rows = conn.execute(
             "SELECT * FROM messages WHERE seq > ? ORDER BY seq LIMIT ?", (cursor, MAX_BATCH + 1)
         ).fetchall()
-        items = tuple(_sequenced(row) for row in _capped(rows))
+        items = tuple(_sequenced(row) for row in _capped(rows[:MAX_BATCH]))
         last = items[-1].seq if items else cursor
         touched = [
             conversation_of(row)

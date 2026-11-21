@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 
 from callboard.cli import main
+from callboard.models import ADMIN_BODY_LIMIT
+from callboard.observe import MAX_BODY_BYTES
 from callboard.paths import store_path
 from callboard.store import MIGRATIONS, open_readonly
 from helpers import Callboard, FakeBellhop, chat_scenario, load_golden, rows, seed
@@ -219,7 +221,7 @@ def test_history_of_an_unknown_conversation_is_not_found(cb: Callboard) -> None:
     assert result.code == 3
     assert result.json()["error"] == {
         "code": "conversation_not_found",
-        "message": "no conversation group:nope",
+        "message": "no conversation group:nope; callboard admin conversations lists them",
     }
 
 
@@ -227,7 +229,7 @@ def test_history_without_a_store_is_not_found(cb: Callboard) -> None:
     assert cb("admin", "history", "group:ops") == (
         3,
         "",
-        "callboard: no conversation group:ops\n",
+        "callboard: no conversation group:ops; callboard admin conversations lists them\n",
     )
     assert Path(store()).exists() is False
 
@@ -239,6 +241,34 @@ def test_history_marks_nothing_read(cb: Callboard) -> None:
         (None,),
         (None,),
     ]
+
+
+@pytest.mark.usefixtures("scenario")
+def test_history_caps_a_page_by_escaped_body_bytes_and_keeps_the_latest(cb: Callboard) -> None:
+    escaped = "\x01" * ADMIN_BODY_LIMIT
+    fits = MAX_BODY_BYTES // (6 * ADMIN_BODY_LIMIT + 2)
+    with closing(sqlite3.connect(store())) as conn, conn:
+        conn.executemany(
+            "INSERT INTO messages (id, conversation_id, sender, body, created_at)"
+            " VALUES (?, 'dm:enki:nanna', 'enki', ?, '2026-11-14T09:00:00Z')",
+            [(f"cb_big{index}", escaped) for index in range(fits + 1)],
+        )
+    latest = page(cb, "dm:enki:nanna")
+    assert (len(latest["messages"]), latest["more"]) == (fits, True)
+    assert latest["messages"][-1]["seq"] == fits + 4
+
+
+@pytest.mark.usefixtures("scenario")
+def test_history_cap_counts_the_cut_body_not_the_stored_one(cb: Callboard) -> None:
+    huge = "x" * 1_000_000
+    with closing(sqlite3.connect(store())) as conn, conn:
+        conn.executemany(
+            "INSERT INTO messages (id, conversation_id, sender, body, created_at)"
+            " VALUES (?, 'dm:enki:nanna', 'enki', ?, '2026-11-14T09:00:00Z')",
+            [(f"cb_huge{index}", huge) for index in range(60)],
+        )
+    latest = page(cb, "dm:enki:nanna")
+    assert (len(latest["messages"]), latest["more"]) == (50, True)
 
 
 @pytest.mark.usefixtures("scenario")

@@ -27,22 +27,27 @@ from callboard.paths import attachments_dir, store_path
 from callboard.store import open_readonly
 
 
+def _snapshot_fields(path: Path, found: Snapshot) -> dict[str, object]:
+    return {
+        "store": str(path),
+        "cursor": found.cursor,
+        "conversations": [summary_json(summary) for summary in found.conversations],
+    }
+
+
 def conversations(args: argparse.Namespace, runtime: Runtime) -> int:
     path = store_path(runtime.env)
     conn = open_readonly(path)
     if conn is None:
-        found = Snapshot(0, ())
+        found = EMPTY
     else:
         with closing(conn):
             found = snapshot(conn)
-    payload = ok_payload(
-        {
-            "store": str(path),
-            "cursor": found.cursor,
-            "conversations": [summary_json(summary) for summary in found.conversations],
-        }
+    emit(
+        ok_payload(_snapshot_fields(path, found)),
+        summary_lines(found.conversations),
+        json_mode=args.json,
     )
-    emit(payload, summary_lines(found.conversations), json_mode=args.json)
     return 0
 
 
@@ -59,10 +64,11 @@ def history(args: argparse.Namespace, runtime: Runtime) -> int:
     found = None
     if conn is not None:
         with closing(conn):
-            found = page(conn, args.conversation_id, args.before, args.limit)
+            found = page(conn, args.conversation_id, before=args.before, limit=args.limit)
     if found is None:
         raise CallboardError(
-            f"no conversation {args.conversation_id}", code="conversation_not_found"
+            f"no conversation {args.conversation_id}; callboard admin conversations lists them",
+            code="conversation_not_found",
         )
     directory = attachments_dir(runtime.env)
     payload = ok_payload(
@@ -81,7 +87,7 @@ def history(args: argparse.Namespace, runtime: Runtime) -> int:
     return 0
 
 
-WATCH_BUSY_TIMEOUT = 1.0
+WATCH_BUSY_TIMEOUT_SECONDS = 1.0
 BUSY_GIVE_UP_SECONDS = 30.0
 EMPTY = Snapshot(0, ())
 
@@ -253,18 +259,12 @@ def file_identity(path: Path) -> Identity | None:
 
 
 def open_watched(path: Path) -> sqlite3.Connection | None:
-    return open_readonly(path, WATCH_BUSY_TIMEOUT)
+    return open_readonly(path, WATCH_BUSY_TIMEOUT_SECONDS)
 
 
 def json_formats(path: Path, directory: Path) -> Formats:
     def snapshot_lines(found: Snapshot) -> list[str]:
-        fields = {
-            "event": "snapshot",
-            "store": str(path),
-            "cursor": found.cursor,
-            "conversations": [summary_json(summary) for summary in found.conversations],
-        }
-        return [render(ok_payload(fields))]
+        return [render(ok_payload({"event": "snapshot", **_snapshot_fields(path, found)}))]
 
     def batch_lines(found: Batch) -> list[str]:
         fields = {

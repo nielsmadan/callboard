@@ -36,10 +36,30 @@ Only SQL runs inside a write transaction: never a subprocess, a push or a file c
 `trace.jsonl` in the data directory; `Runtime.trace` carries the emitter (`quiet` in tests) and an
 emit never raises. `callboard log` reads it. What a ring did is in bellhop's trace.
 
+## App
+
+`app/` holds the macOS menu bar app, which only observes through `callboard admin ... --json`: the
+`Callboard` target (windows, menu bar) and the `CallboardKit` package (everything testable).
+Run it through `just app <recipe>` (`setup`, `check`, `build`, `demo`; `run` launches the app, so
+leave that to the user). `just check` and `just coverage` never build it, but they compare the
+kit's JSON fixtures with `tests/golden/` and run the demo script; `just app check` builds and
+tests it. `just app demo` seeds a store under `app/build/demo-data` with `app/scripts/demo.py`,
+which runs callboard with `HOME` and the three `XDG_*_HOME` folders inside the target. Details in
+[docs/app.md](docs/app.md).
+
+App conventions: the `Callboard` target builds in Swift 5 mode with complete strict concurrency
+and MainActor default isolation; `CallboardKit` is Swift 6 with no default isolation. Logic that
+can be tested goes in the kit, behind Swift Testing tests with a plain `import CallboardKit` and
+fakes instead of processes; views stay thin and are only compile-checked. Use `@Observable`,
+never `ObservableObject`, and keep `@AppStorage` keys in `AppStorageKeys`. Only `WindowManager`
+changes the activation policy. `just app check` fails on any warning in our code and on unused
+code (Periphery, with the kit scan including tests). A change to the admin JSON updates the
+goldens in `tests/golden/`, which `tests/test_app_contract.py` pins to the kit's fixtures.
+
 ## Conventions
 
 - Target Python 3.13, standard library only at runtime, Ruff at 100 columns, strict mypy over
-  `src` and `tests`, at least 80% branch coverage.
+  `src`, `tests` and `app/scripts`, at least 80% branch coverage.
 - New behavior gets observable tests in the matching `tests/test_<module>.py` file.
 - Tests never call a real `bellhop` or agent: `tests/fakes/bellhop` replays the JSON fixtures in
   `tests/contract/`.

@@ -1,0 +1,109 @@
+project := "Callboard.xcodeproj"
+scheme := "Callboard"
+build_dir := "build"
+app_path := build_dir / "Build/Products/Debug/Callboard.app"
+strict_dir := build_dir / "strict"
+strict_log := build_dir / "strict.log"
+
+[private]
+default:
+    @just --list
+
+# Resolve packages, then verify the tools.
+setup:
+    @just resolve-deps
+    @just doctor
+
+# Verify the tools this app needs and print their versions.
+doctor:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    fail=0
+    need() {
+        if command -v "$1" >/dev/null 2>&1; then
+            printf '  ok       %-12s %s\n' "$1" "$("$@" 2>/dev/null | head -n 1)"
+        else
+            printf '  MISSING  %s\n' "$1"; fail=1
+        fi
+    }
+    need swiftformat --version
+    need swiftlint version
+    need xcodebuild -version
+    need periphery version
+    [ "$fail" -eq 0 ] && printf 'Everything in place.\n'
+    exit $fail
+
+resolve-deps:
+    @xcodebuild -resolvePackageDependencies -project {{project}} -scheme {{scheme}} -derivedDataPath {{build_dir}}
+
+build:
+    @xcodebuild -project {{project}} -scheme {{scheme}} -configuration Debug -derivedDataPath {{build_dir}} build
+
+# A clean build that fails on any warning in Callboard or CallboardKit.
+build-strict:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p {{build_dir}}
+    rm -rf {{strict_dir}}
+    xcodebuild -project {{project}} -scheme {{scheme}} -configuration Debug \
+        -derivedDataPath {{strict_dir}} clean build > {{strict_log}} 2>&1 \
+        || { tail -n 50 {{strict_log}}; exit 1; }
+    if grep -E "/app/(Callboard|CallboardKit)/[^:]+:[0-9]+:[0-9]+: warning:|warning: .*\(in target '(Callboard|CallboardKit)'" {{strict_log}}; then
+        echo "build-strict: warnings found; see {{strict_log}}" >&2
+        exit 1
+    fi
+    echo "build-strict: no warnings"
+
+# Fails on any warning in the kit's sources or tests, which build-strict does not compile.
+test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p {{build_dir}}
+    rm -rf {{build_dir}}/kit
+    NO_COLOR=1 TERM=dumb swift test --package-path CallboardKit --scratch-path {{build_dir}}/kit --no-parallel > {{build_dir}}/kit.log 2>&1 \
+        || { cat {{build_dir}}/kit.log; exit 1; }
+    cat {{build_dir}}/kit.log
+    if grep -E "/app/CallboardKit/[^:]+:[0-9]+:[0-9]+: warning:" {{build_dir}}/kit.log; then
+        echo "test: warnings found; see {{build_dir}}/kit.log" >&2
+        exit 1
+    fi
+
+lint *files:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    . ./scripts/lintable.sh {{files}}
+    [ ${#targets[@]} -eq 0 ] || swiftlint --strict "${targets[@]}"
+
+lint-fix *files:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    . ./scripts/lintable.sh {{files}}
+    [ ${#targets[@]} -eq 0 ] || swiftlint --fix "${targets[@]}"
+
+format *files:
+    @swiftformat {{ if files == "" { "." } else { files } }}
+
+check-unused:
+    @periphery scan --project {{project}} --schemes {{scheme}} --retain-public --strict
+    @cd CallboardKit && periphery scan --strict -- --build-system native
+
+# Format check, lint, strict build, tests and unused-code scans.
+check:
+    @swiftformat --lint .
+    @swiftlint --strict .
+    @just build-strict
+    @just test
+    @just check-unused
+
+# Build and launch the app.
+run: build
+    @{{app_path}}/Contents/MacOS/Callboard
+
+# Seed a demo store under build/demo-data; pass --live to keep posting.
+[positional-arguments]
+demo *args:
+    @uv run --locked --project .. python scripts/demo.py "$@"
+
+clean:
+    @rm -rf {{build_dir}} CallboardKit/.build
+    @echo "Build directory cleaned."

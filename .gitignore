@@ -14,3 +14,8 @@ dist/
 htmlcov/
 coverage.xml
 .DS_Store
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+.build/
+DerivedData/

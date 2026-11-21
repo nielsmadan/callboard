@@ -2,6 +2,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from callboard.models import (
+    ADMIN_BODY_LIMIT,
     Attachment,
     Conversation,
     ConversationSummary,
@@ -14,8 +15,7 @@ from callboard.models import (
 from callboard.refs import ref_of
 from callboard.text import one_line, shortened, visible
 
-PREVIEW_CHARS = 140
-ADMIN_BODY_CHARS = 65_536
+PREVIEW_LIMIT = 140
 
 
 def attachment_json(item: Attachment, directory: Path) -> dict[str, object]:
@@ -146,7 +146,7 @@ def last_json(item: Sequenced) -> dict[str, object]:
         "id": item.message.id,
         "sender": item.message.sender,
         "created_at": item.message.created_at,
-        "preview": shortened(item.message.body, PREVIEW_CHARS),
+        "preview": shortened(item.message.body, PREVIEW_LIMIT),
     }
 
 
@@ -174,8 +174,8 @@ def admin_message_json(
     return {
         "seq": item.seq,
         **message_json(message, files, directory),
-        "body": message.body[:ADMIN_BODY_CHARS],
-        "body_truncated": len(message.body) > ADMIN_BODY_CHARS,
+        "body": message.body[:ADMIN_BODY_LIMIT],
+        "body_truncated": len(message.body) > ADMIN_BODY_LIMIT,
     }
 
 
@@ -194,7 +194,7 @@ def summary_line(summary: ConversationSummary, widths: tuple[int, int]) -> str:
     last = summary.last
     if last is None:
         return head.rstrip()
-    preview = shortened(last.message.body, PREVIEW_CHARS)
+    preview = shortened(last.message.body, PREVIEW_LIMIT)
     return f"{head}  {last.message.created_at} {last.message.sender}: {preview}"
 
 

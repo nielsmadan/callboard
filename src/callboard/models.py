@@ -2,6 +2,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
+ADMIN_BODY_LIMIT = 65_536
+
 type ParticipantKind = Literal["agent", "human"]
 type ConversationKind = Literal["dm", "group", "mail", "topic"]
 type MemberRole = Literal["member", "from", "to", "cc", "subscriber"]

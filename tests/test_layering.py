@@ -48,7 +48,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     ),
     "mail": frozenset({"conversations", "errors", "messages", "models", "receipts", "store"}),
     "ping": frozenset({"bellhop_client", "errors", "models", "store", "text"}),
-    "observe": frozenset({"attachments", "conversations", "errors", "messages", "models", "store"}),
+    "observe": frozenset({"attachments", "conversations", "messages", "models", "store"}),
     "cli": frozenset(
         {
             "attachments",
