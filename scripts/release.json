@@ -1,0 +1,24 @@
+{
+  "name": "callboard",
+  "repository": "nielsmadan/callboard",
+  "workflow": "release.yml",
+  "branch": "main",
+  "initial_version": "0.1.0",
+  "sign": true,
+  "tag_prefix": "v",
+  "tools": ["git", "uv", "uvx", "just"],
+  "checks": [["just", "check-static"], ["just", "coverage"]],
+  "stages": [
+    {
+      "files": ["pyproject.toml", "uv.lock", "CHANGELOG.md"],
+      "commands": [
+        ["{python}", "scripts/release.py", "prepare", "{version}"],
+        ["uv", "lock"],
+        ["just", "changelog", "{version}"]
+      ],
+      "checks": [["just", "build"], ["just", "check-package"]],
+      "message": "chore: release {version}"
+    }
+  ],
+  "publication": "GitHub Actions verifies the tagged source, publishes a GitHub release with the wheel and source distribution, and updates the Homebrew formula."
+}

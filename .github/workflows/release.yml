@@ -1,0 +1,232 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing annotated release tag to publish (for example, v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: release-source
+    outputs:
+      release-commit: ${{ steps.identity.outputs.release-commit }}
+      version: ${{ steps.project.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: nielsmadan/curtaincall@v1.4.0
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Validate annotated tag and ancestry
+        id: identity
+        working-directory: .
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "Release retries must run from main" >&2
+              exit 1
+            fi
+            RELEASE_COMMIT=$(curtains ci validate-tag "$RELEASE_TAG")
+          else
+            RELEASE_COMMIT=$(curtains ci validate-tag "$RELEASE_TAG" "$GITHUB_SHA")
+          fi
+          echo "release-commit=$RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
+      - name: Check out the exact release source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ steps.identity.outputs.release-commit }}
+          path: release-source
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.12.13"
+          python-version: "3.13"
+          working-directory: release-source
+      - uses: extractions/setup-just@v4.0.0
+        with:
+          just-version: "1.58.0"
+      - name: Validate project version
+        id: project
+        run: python ../scripts/release.py project-metadata "$RELEASE_TAG" pyproject.toml >> "$GITHUB_OUTPUT"
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups
+      - name: Static analysis
+        run: just check-static
+      - name: Tests with branch coverage
+        run: just coverage
+      - name: Distribution tests
+        run: just check-package
+      - name: Build and smoke-test release assets
+        env:
+          VERSION: ${{ steps.project.outputs.version }}
+        run: |
+          just build
+          for ARCHIVE in "dist/callboard-${VERSION}-py3-none-any.whl" "dist/callboard-${VERSION}.tar.gz"; do
+            test -f "$ARCHIVE"
+            ENV_DIR="$PWD/.cache/release/$(basename "$ARCHIVE")-env"
+            uv venv --python 3.13 "$ENV_DIR"
+            uv pip install --no-deps --python "$ENV_DIR/bin/python" "$ARCHIVE"
+            (
+              cd "$RUNNER_TEMP"
+              test "$("$ENV_DIR/bin/callboard" --version)" = "callboard $VERSION"
+              "$ENV_DIR/bin/callboard" --help > /dev/null
+            )
+          done
+      - name: Generate release notes and checksums
+        run: |
+          BUNDLE="$RUNNER_TEMP/release-bundle"
+          mkdir -p "$BUNDLE/dist"
+          cp dist/* "$BUNDLE/dist/"
+          uvx git-cliff@2.13.1 --config cliff.toml --current --strip all \
+            -o "$BUNDLE/release-notes.md"
+          test -s "$BUNDLE/release-notes.md"
+          (
+            cd "$BUNDLE/dist"
+            sha256sum ./*.whl ./*.tar.gz > SHA256SUMS
+          )
+      - name: Save verified release bundle
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: release-bundle
+          path: ${{ runner.temp }}/release-bundle
+          if-no-files-found: error
+
+  formula:
+    needs: verify
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - name: Check tap configuration
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "Set HOMEBREW_TAP_TOKEN in this repository's Actions secrets before releasing." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Render Homebrew formula
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/source.tar.gz" \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${RELEASE_TAG}.tar.gz"
+          mkdir -p "$RUNNER_TEMP/formula"
+          python scripts/release.py formula \
+            "$RELEASE_TAG" "$RUNNER_TEMP/source.tar.gz" "$RUNNER_TEMP/formula/callboard.rb"
+      - name: Install and test through Homebrew
+        run: |
+          brew tap-new --no-git nielsmadan/callboard-release-test
+          cp "$RUNNER_TEMP/formula/callboard.rb" \
+            "$(brew --repository nielsmadan/callboard-release-test)/Formula/callboard.rb"
+          brew install --build-from-source nielsmadan/callboard-release-test/callboard
+          brew test nielsmadan/callboard-release-test/callboard
+      - name: Save tested formula
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: homebrew-formula
+          path: ${{ runner.temp }}/formula
+          if-no-files-found: error
+
+  publish:
+    needs: [verify, formula]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: nielsmadan/curtaincall@v1.4.0
+      - name: Revalidate release commit
+        env:
+          RELEASE_COMMIT: ${{ needs.verify.outputs.release-commit }}
+        run: |
+          test "$(curtains ci validate-tag "$RELEASE_TAG" "$RELEASE_COMMIT")" = "$RELEASE_COMMIT"
+      - name: Download verified release bundle
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: release-bundle
+          path: release-bundle
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_COMMIT: ${{ needs.verify.outputs.release-commit }}
+        run: |
+          curtains ci publish "$RELEASE_TAG" "$RELEASE_COMMIT" \
+            --notes release-bundle/release-notes.md release-bundle/dist/*
+
+  homebrew:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          path: release-tools
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Download tested formula
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: homebrew-formula
+          path: homebrew-formula
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: nielsmadan/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+      - name: Publish Homebrew formula
+        working-directory: homebrew-tap
+        run: |
+          FORMULA_ACTION=$(python ../release-tools/scripts/release.py publish-formula \
+            ../homebrew-formula/callboard.rb Formula/callboard.rb)
+          if [ "$FORMULA_ACTION" = "skipped-newer" ]; then
+            echo "A newer Homebrew formula is already published"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/callboard.rb
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: update callboard to ${RELEASE_TAG#v}"
+          git push origin HEAD:main

@@ -4,7 +4,11 @@ Chat, mail and pings between coding agents (Claude Code, Codex, Pi). callboard k
 store of participants, conversations and messages, and rings a recipient's session through
 [bellhop](https://github.com/nielsmadan/bellhop).
 
-Status: pre-release. Not published yet; `just install` installs it from a checkout.
+```sh
+brew install nielsmadan/tap/callboard    # installs bellhop too
+```
+
+Changes are listed in the [changelog](CHANGELOG.md).
 
 Messages are not authenticated: everything runs as one local user, and a sender name is whatever
 the sender typed.

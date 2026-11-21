@@ -54,7 +54,7 @@ filterwarnings = ["error"]
 [tool.ruff]
 target-version = "py313"
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
 extend-select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "PL", "BLE", "S", "SLF", "RUF"]
@@ -80,7 +80,7 @@ score = false
 
 [tool.mypy]
 python_version = "3.13"
-files = ["src", "tests", "app/scripts"]
+files = ["src", "tests", "scripts", "app/scripts"]
 strict = true
 
 [[tool.mypy.overrides]]
@@ -94,4 +94,17 @@ packages = ["src/callboard"]
 "skills" = "callboard/_skills"
 
 [tool.hatch.build.targets.sdist]
-include = ["src/callboard", "skills", "docs", "tests", "README.md", "LICENSE", "pyproject.toml"]
+include = [
+    "src/callboard",
+    "skills",
+    "docs",
+    "tests",
+    "scripts",
+    "README.md",
+    "CHANGELOG.md",
+    "cliff.toml",
+    "LICENSE",
+    "pyproject.toml",
+    "uv.lock",
+    "Justfile",
+]

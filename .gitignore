@@ -1,4 +1,5 @@
 .cache/*
+.uv/
 !.cache/.gitkeep
 .coverage
 .mypy_cache/

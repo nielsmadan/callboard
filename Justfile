@@ -68,6 +68,14 @@ install-editable:
 uninstall:
     @uv tool uninstall callboard
 
+# Cut a release with curtains: --dry-run, patch|minor|major or X.Y.Z, --yes.
+release *args:
+    @LEFTHOOK=0 curtains {{args}}
+
+# Regenerate CHANGELOG.md as if VERSION were tagged.
+changelog version:
+    @env UV_TOOL_DIR="$PWD/.uv/tools" UV_CACHE_DIR="$PWD/.uv/cache" UV_PYTHON_INSTALL_DIR="$PWD/.uv/python" uvx git-cliff@2.13.1 --config cliff.toml --tag 'v{{version}}' -o CHANGELOG.md
+
 [positional-arguments]
 app *args:
     @cd app && just "$@"

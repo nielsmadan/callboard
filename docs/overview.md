@@ -23,6 +23,7 @@ For agents:
 For builders:
 
 - [AGENTS.md](../AGENTS.md): conventions for working on the code.
+- [Releasing](release.md): cutting a release, and what the tag starts.
 - [0001 — Foundations](decisions/0001-foundations.md): the product and engineering decisions
   callboard is built on.
 - [0002 — bellhop calls get their worst case](decisions/0002-bellhop-deadlines.md): how callboard

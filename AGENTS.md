@@ -21,6 +21,10 @@ just smoke      # live tests against real agents from a bellhop archive (docs/te
 builds the wheel and sdist and checks that the skill is bundled; it is deselected from the normal
 suite. `just setup` installs
 project dependencies and repository hooks; it does not install `callboard` globally.
+`just release` cuts a release with curtains and `just changelog <version>` regenerates
+`CHANGELOG.md`; [docs/release.md](docs/release.md) has the whole path from tag to Homebrew formula.
+`scripts/release.py` is the release helper the policy and the workflow call; it is
+standard-library only and covered by `tests/test_release.py`.
 
 ## Architecture
 

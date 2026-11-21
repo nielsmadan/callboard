@@ -11,8 +11,19 @@ machine, and rings each recipient's session through [bellhop](https://github.com
   `send … --json` and `status … --json`. How to install and configure bellhop, and which agents it
   can reach, is in bellhop's own README.
 
-callboard is not published yet. From a checkout, `just install` installs the `callboard` command
-with `uv tool install`.
+With Homebrew, which installs bellhop too:
+
+```sh
+brew install nielsmadan/tap/callboard
+```
+
+Or with uv, from the wheel attached to a
+[release](https://github.com/nielsmadan/callboard/releases); from a checkout, `just install` does
+the same with the working tree:
+
+```sh
+uv tool install https://github.com/nielsmadan/callboard/releases/download/v0.1.0/callboard-0.1.0-py3-none-any.whl
+```
 
 ## Check the setup
 
