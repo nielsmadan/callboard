@@ -1,5 +1,5 @@
 import argparse
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, NoReturn
 
 from callboard.errors import CallboardError
@@ -21,6 +21,18 @@ def _as_flag() -> "_Parser":
     parent = _Parser(add_help=False)
     parent.add_argument(
         "--as", dest="as_handle", metavar="HANDLE", default=argparse.SUPPRESS, help=AS_HELP
+    )
+    return parent
+
+
+def _rejected_as() -> "_Parser":
+    parent = _Parser(add_help=False)
+    parent.add_argument(
+        "--as",
+        dest="as_handle",
+        metavar="HANDLE",
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
     )
     return parent
 
@@ -62,17 +74,41 @@ def build_parser() -> argparse.ArgumentParser:
     log.add_argument("--json", action="store_true", help="print one JSON object")
     _add_chat(commands)
     _add_reading(commands)
+    _add_admin(commands)
     return parser
 
 
 MAX_LIMIT = 1_000_000
+MAX_ADMIN_LIMIT = 500
+MAX_SEQ = 2**63 - 1
+MIN_INTERVAL = 0.05
+MAX_INTERVAL = 10.0
+
+
+def _within(high: int) -> Callable[[str], int]:
+    def check(text: str) -> int:
+        value = int(text) if text.isascii() and text.isdigit() else 0
+        if not 1 <= value <= high:
+            raise argparse.ArgumentTypeError(f"must be an integer from 1 to {high}, got '{text}'")
+        return value
+
+    return check
+
+
+def _interval(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError:
+        value = 0.0
+    if not MIN_INTERVAL <= value <= MAX_INTERVAL:
+        raise argparse.ArgumentTypeError(
+            f"must be a number of seconds from {MIN_INTERVAL} to {MAX_INTERVAL:g}, got '{text}'"
+        )
+    return value
 
 
 def _positive(text: str) -> int:
-    value = int(text) if text.isascii() and text.isdigit() else 0
-    if not 1 <= value <= MAX_LIMIT:
-        raise argparse.ArgumentTypeError(f"must be an integer from 1 to {MAX_LIMIT}, got '{text}'")
-    return value
+    return _within(MAX_LIMIT)(text)
 
 
 def _handles(text: str) -> list[str]:
@@ -173,6 +209,48 @@ def _add_reading(commands: "argparse._SubParsersAction[_Parser]") -> None:
     get.add_argument("attachment_id", metavar="ATTACHMENT")
     get.add_argument("--out", metavar="PATH", help="copy the file here instead")
     get.add_argument("--json", action="store_true", help="print one JSON object")
+
+
+def _add_admin(commands: "argparse._SubParsersAction[_Parser]") -> None:
+    admin = commands.add_parser(
+        "admin",
+        parents=[_rejected_as()],
+        description="Read every conversation in the store. Nothing is marked read.",
+    )
+    actions = admin.add_subparsers(dest="action", metavar="ACTION", parser_class=_Parser)
+    actions.required = True
+    conversations = actions.add_parser(
+        "conversations",
+        parents=[_rejected_as()],
+        help="list every conversation with its latest message",
+    )
+    conversations.add_argument("--json", action="store_true", help="print one JSON object")
+    history = actions.add_parser(
+        "history", parents=[_rejected_as()], help="print a page of any conversation's messages"
+    )
+    history.add_argument("conversation_id", metavar="CONVERSATION_ID")
+    history.add_argument(
+        "--before", type=_within(MAX_SEQ), metavar="SEQ", help="only messages before this seq"
+    )
+    history.add_argument(
+        "--limit",
+        type=_within(MAX_ADMIN_LIMIT),
+        default=50,
+        metavar="N",
+        help=f"how many messages, at most {MAX_ADMIN_LIMIT}",
+    )
+    history.add_argument("--json", action="store_true", help="print one JSON object")
+    watch = actions.add_parser(
+        "watch", parents=[_rejected_as()], help="stream new messages as they arrive"
+    )
+    watch.add_argument(
+        "--interval",
+        type=_interval,
+        default=0.25,
+        metavar="SECONDS",
+        help=f"how often to look for changes, {MIN_INTERVAL} to {MAX_INTERVAL:g} seconds",
+    )
+    watch.add_argument("--json", action="store_true", help="print one JSON object per line")
 
 
 def _utf8(argument: str) -> bool:

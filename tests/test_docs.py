@@ -83,3 +83,7 @@ def test_local_links_in_the_docs_resolve() -> None:
         if not (source.parent / target).exists()
     ]
     assert broken == []
+
+
+def test_the_skill_never_mentions_the_admin_commands() -> None:
+    assert "admin" not in SKILL.read_text(encoding="utf-8")

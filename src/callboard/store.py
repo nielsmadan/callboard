@@ -116,11 +116,11 @@ def connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
-def connect_readonly(path: Path) -> sqlite3.Connection:
+def connect_readonly(path: Path, busy_timeout: float = BUSY_TIMEOUT_SECONDS) -> sqlite3.Connection:
     conn = sqlite3.connect(
         path.absolute().as_uri() + "?mode=ro",
         uri=True,
-        timeout=BUSY_TIMEOUT_SECONDS,
+        timeout=busy_timeout,
         isolation_level=None,
     )
     try:
@@ -135,6 +135,18 @@ def connect_readonly(path: Path) -> sqlite3.Connection:
 @contextmanager
 def write(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     conn.execute("BEGIN IMMEDIATE")
+    try:
+        yield conn
+        conn.execute("COMMIT")
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+
+
+@contextmanager
+def read_transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    conn.execute("BEGIN")
     try:
         yield conn
         conn.execute("COMMIT")
@@ -167,14 +179,18 @@ def _apply(conn: sqlite3.Connection, version: int, statements: Sequence[str]) ->
         )
 
 
+def too_new(current: int, supported: int) -> CallboardError:
+    return CallboardError(
+        f"store schema version {current} is newer than this callboard supports"
+        f" ({supported}); upgrade callboard",
+        code="schema_too_new",
+    )
+
+
 def migrate(conn: sqlite3.Connection, migrations: Sequence[Sequence[str]] = MIGRATIONS) -> None:
     current = schema_version(conn)
     if current > len(migrations):
-        raise CallboardError(
-            f"store schema version {current} is newer than this callboard supports"
-            f" ({len(migrations)}); upgrade callboard",
-            code="schema_too_new",
-        )
+        raise too_new(current, len(migrations))
     for version, statements in enumerate(migrations, start=1):
         if current < version:
             _apply(conn, version, statements)
@@ -207,6 +223,36 @@ def open_store(path: Path) -> sqlite3.Connection:
     except CallboardError:
         conn.close()
         raise
+    return conn
+
+
+def open_readonly(
+    path: Path, busy_timeout: float = BUSY_TIMEOUT_SECONDS
+) -> sqlite3.Connection | None:
+    try:
+        if not path.exists():
+            return None
+        conn = connect_readonly(path, busy_timeout)
+    except (OSError, sqlite3.Error) as error:
+        raise CallboardError(
+            f"cannot open store {path}: {error}", code="store_unavailable"
+        ) from error
+    try:
+        current = schema_version(conn)
+    except sqlite3.Error as error:
+        conn.close()
+        raise CallboardError(
+            f"cannot read store {path}: {error}", code="store_unavailable"
+        ) from error
+    except BaseException:
+        conn.close()
+        raise
+    if current > len(MIGRATIONS):
+        conn.close()
+        raise too_new(current, len(MIGRATIONS))
+    if current == 0:
+        conn.close()
+        return None
     return conn
 
 

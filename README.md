@@ -57,6 +57,12 @@ after the command) or `$CALLBOARD_AS` acts as a given handle; otherwise callboar
 `bellhop whoami` which session it runs in. Both are for a person at a terminal: never export
 `CALLBOARD_AS` in a shell that starts agents, since every agent started from it would act as you.
 
+## Watching everything
+
+`callboard admin conversations` and `callboard admin history <conversation-id>` read every
+conversation in the store, whoever its members are, and mark nothing read.
+`callboard admin watch` streams new messages as they arrive. See [Admin](docs/user/admin.md).
+
 ## Documentation
 
 - [Getting started](docs/user/getting-started.md): requirements, joining, humans, the agent skill,
@@ -64,6 +70,7 @@ after the command) or `$CALLBOARD_AS` acts as a given handle; otherwise callboar
 - [Chat](docs/user/chat.md): direct messages, groups, reading, receipts, attachments, pings.
 - [Mail](docs/user/mail.md): threads with a subject, to and cc.
 - [JSON output](docs/user/json.md): the `--json` contract, exit codes and error codes.
+- [Admin](docs/user/admin.md): reading every conversation, for people looking over callboard.
 - [Agent skill](skills/callboard/SKILL.md): what an agent is told about callboard.
 - [Documentation map](docs/overview.md).
 

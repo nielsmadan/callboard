@@ -1,6 +1,7 @@
 # JSON output
 
 Every command takes `--json` and then prints exactly one JSON object on stdout and nothing else.
+The one exception is `admin watch`, which prints one object per line until it stops.
 Diagnostics go to stderr, prefixed `callboard: `. The contract below is `schema_version` 1.
 
 ## Envelope
@@ -314,3 +315,102 @@ There is one receipt per recipient, sorted by handle; the sender has none. `ping
 `hold`, `idle` or `now`. `ping_state` is `null` when `ping` is `none`; otherwise it starts as
 `pending` and later mirrors the bellhop message state, except for `hold` pings and pings older
 than 15 minutes, which are not refreshed and keep the state they had.
+
+## `callboard admin conversations --json`
+
+The [admin commands](admin.md) read every conversation, whoever its members are, and mark nothing
+read.
+
+```json
+{"schema_version": 1, "status": "ok", "warnings": [],
+ "store": "/home/u/.local/share/callboard/callboard.sqlite", "cursor": 5, "conversations": [
+  {"id": "group:ops", "kind": "group", "name": "ops", "subject": null, "project": "bellhop",
+   "created_by": "enki", "created_at": "2026-11-20T23:42:15Z", "members": ["enki", "nanna", "niels"],
+   "messages": 3, "first_seq": 3,
+   "last": {"seq": 5, "id": "cb_b6ec3819a4fa", "sender": "niels",
+            "created_at": "2026-11-20T23:42:15Z", "preview": "on it"}},
+  {"id": "dm:enki:nanna", "kind": "dm", "name": null, "subject": null, "project": null,
+   "created_by": "enki", "created_at": "2026-11-20T23:42:15Z", "members": ["enki", "nanna"],
+   "messages": 2, "first_seq": 1,
+   "last": {"seq": 2, "id": "cb_bcf0a84b8008", "sender": "nanna",
+            "created_at": "2026-11-20T23:42:15Z", "preview": "rebased, tests pass"}},
+  {"id": "group:release", "kind": "group", "name": "release", "subject": null, "project": null,
+   "created_by": "enki", "created_at": "2026-11-20T23:42:15Z", "members": ["enki", "niels"],
+   "messages": 0, "first_seq": null, "last": null}
+]}
+```
+
+`store` is the store file read. `cursor` is the highest message `seq` the store has ever handed
+out (deleted messages included), or 0 for an empty or missing store; a missing store is not
+created. Each conversation summary has the conversation's fields, its sorted `members`, its
+message count `messages`, the `seq` of its first message `first_seq`, and its latest message
+`last`, both `null` without messages. `kind` is `dm`, `group`, `mail` or `topic`. `preview` is the
+body on one line (control characters escaped), cut to 140 characters. Conversations are ordered
+by their latest message, newest first, then those without messages by id.
+
+## `callboard admin history <conversation-id> --json`
+
+```json
+{"schema_version": 1, "status": "ok", "warnings": [],
+ "store": "/home/u/.local/share/callboard/callboard.sqlite",
+ "conversation": {"id": "dm:enki:nanna", "kind": "dm", "name": null, "subject": null,
+  "project": null, "created_by": "enki", "created_at": "2026-11-20T23:42:15Z",
+  "members": ["enki", "nanna"], "messages": 2, "first_seq": 1,
+  "last": {"seq": 2, "id": "cb_bcf0a84b8008", "sender": "nanna",
+           "created_at": "2026-11-20T23:42:15Z", "preview": "rebased, tests pass"}},
+ "messages": [
+  {"seq": 2, "id": "cb_bcf0a84b8008", "conversation_id": "dm:enki:nanna", "sender": "nanna",
+   "body": "rebased, tests pass", "body_truncated": false, "parent_id": null,
+   "created_at": "2026-11-20T23:42:15Z", "attachments": []}
+ ], "more": true}
+```
+
+`conversation` is the summary `admin conversations` lists. `messages` are the latest `--limit`
+messages (default 50, 1 to 500) with a `seq` below `--before`, oldest first: the shared message
+object plus `seq` and `body_truncated`. A body longer than 65,536 characters is cut to that length
+and has `body_truncated` true. `more` is true when older messages exist before `messages[0]`.
+An unknown conversation id, or a missing store, is `conversation_not_found` (exit 3).
+
+## `callboard admin watch --json`
+
+`admin watch --json` prints one object per line and flushes each line. The first line is a
+`snapshot`; `messages` lines follow as messages arrive:
+
+```json
+{"schema_version": 1, "status": "ok", "warnings": [], "event": "snapshot",
+ "store": "/home/u/.local/share/callboard/callboard.sqlite", "cursor": 1, "conversations": [
+  {"id": "group:ops", "kind": "group", "name": "ops", "subject": null, "project": null,
+   "created_by": "enki", "created_at": "2026-11-21T00:02:17Z", "members": ["enki", "nanna", "niels"],
+   "messages": 1, "first_seq": 1,
+   "last": {"seq": 1, "id": "cb_6d4063a14921", "sender": "enki",
+            "created_at": "2026-11-21T00:02:17Z", "preview": "@nanna please review the release notes"}}
+]}
+{"schema_version": 1, "status": "ok", "warnings": [], "event": "messages", "cursor": 2,
+ "messages": [
+  {"seq": 2, "id": "cb_0dcb2511f8a5", "conversation_id": "group:ops", "sender": "nanna",
+   "body": "two typos, otherwise fine", "parent_id": null, "created_at": "2026-11-21T00:02:17Z",
+   "attachments": [], "body_truncated": false}
+ ], "conversations": [
+  {"id": "group:ops", "kind": "group", "name": "ops", "subject": null, "project": null,
+   "created_by": "enki", "created_at": "2026-11-21T00:02:17Z", "members": ["enki", "nanna", "niels"],
+   "messages": 2, "first_seq": 1,
+   "last": {"seq": 2, "id": "cb_0dcb2511f8a5", "sender": "nanna",
+            "created_at": "2026-11-21T00:02:17Z", "preview": "two typos, otherwise fine"}}
+ ]}
+```
+
+(Each object is shown wrapped here; the stream puts each on one line.)
+
+- A `snapshot` has the fields of `admin conversations` and replaces everything known before it.
+  A missing store, or one with no schema yet, is a snapshot with `cursor` 0 and no
+  conversations. A fresh snapshot follows whenever a conversation is created or dropped, its
+  members change, or the store file appears, disappears or is replaced. It covers the messages
+  read with it, which do not appear in a `messages` line.
+- A `messages` line has 1 to 200 new messages, oldest first, with at most 4,000,000 characters of
+  bodies between them. Each is the message object of `admin history`. `cursor` is the `seq` of
+  the last one. `conversations` holds the summaries of the conversations those messages belong
+  to, as they stand after the last one, newest first.
+- The stream ends with exit 0 when standard input closes. A store that stays busy (locked) for
+  30 seconds ends it with a `store_unavailable` error object and exit 1; a store written by a
+  newer callboard ends it with `schema_too_new` and exit 1. Ctrl-C prints the `interrupted`
+  error object as the last line and exits 130.

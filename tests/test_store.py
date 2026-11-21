@@ -14,7 +14,9 @@ from callboard.store import (
     connect,
     enable_wal,
     migrate,
+    open_readonly,
     open_store,
+    read_transaction,
     schema_version,
     write,
 )
@@ -228,3 +230,35 @@ def test_a_version_1_store_gains_the_lookup_indexes(tmp_path: Path) -> None:
         }
         assert schema_version(conn) == len(MIGRATIONS)
     assert {"receipts_recipient", "attachments_message"} <= indexes
+
+
+def test_a_readonly_store_refuses_writes_and_keeps_the_busy_timeout(tmp_path: Path) -> None:
+    path = tmp_path / "callboard.sqlite"
+    open_store(path).close()
+    conn = open_readonly(path, busy_timeout=1.0)
+    assert conn is not None
+    with closing(conn):
+        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 1000
+        with pytest.raises(sqlite3.OperationalError, match=r"readonly|query_only"):
+            conn.execute("INSERT INTO meta (key, value) VALUES ('x', 'y')")
+
+
+def test_a_store_path_that_cannot_be_opened_is_unavailable(tmp_path: Path) -> None:
+    path = tmp_path / "callboard.sqlite"
+    path.mkdir()
+    with pytest.raises(CallboardError) as caught:
+        open_readonly(path)
+    assert caught.value.code == "store_unavailable"
+    assert str(caught.value).startswith(f"cannot open store {path}: ")
+
+
+def test_a_failed_read_ends_its_transaction(tmp_path: Path) -> None:
+    path = tmp_path / "callboard.sqlite"
+    open_store(path).close()
+    conn = open_readonly(path)
+    assert conn is not None
+    with closing(conn):
+        with pytest.raises(KeyError), read_transaction(conn):
+            conn.execute("SELECT count(*) FROM participants").fetchone()
+            raise KeyError("stop")
+        assert conn.in_transaction is False

@@ -27,7 +27,8 @@ project dependencies and repository hooks; it does not install `callboard` globa
 `tests/test_layering.py` machine-enforces the module dependency contract: layer order,
 per-module import allowances, absolute internal imports, and a stdlib-only runtime. Internal
 modules never import the package root. The CLI layer owns parsing, dispatch and presentation;
-the store owns SQL; identity owns calls to `bellhop`.
+the store owns SQL; identity owns calls to `bellhop`. `observe` holds the read-only queries behind
+`callboard admin`, each one read transaction over a connection from `store.open_readonly`.
 
 Only SQL runs inside a write transaction: never a subprocess, a push or a file copy.
 
@@ -48,7 +49,8 @@ emit never raises. `callboard log` reads it. What a ring did is in bellhop's tra
   (`tests/test_docs.py`). Example output in the docs is pasted from real runs, never written by
   hand; a run against a temporary `HOME` and `tests/fakes/bellhop` is enough.
 - New code normally needs no comments or docstrings. Use names and small typed functions.
-- `--json` prints exactly one object on stdout. Diagnostics go to stderr prefixed `callboard: `.
+- `--json` prints exactly one object on stdout; `admin watch` alone prints one object per line.
+  Diagnostics go to stderr prefixed `callboard: `.
 - Error messages in git style: lowercase, no trailing period, clauses joined with `;`.
 - Exit codes: 0 ok, 1 failure, 2 usage, 3 not found or ambiguous, 4 no usable route (reserved;
   never returned), 5 hls unavailable, 130 interrupted.

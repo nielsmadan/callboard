@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
@@ -95,6 +95,44 @@ class Attachment:
     filename: str
     media_type: str
     size: int
+
+
+@dataclass(frozen=True)
+class Sequenced:
+    seq: int
+    message: Message
+
+
+@dataclass(frozen=True)
+class ConversationSummary:
+    conversation: Conversation
+    members: tuple[str, ...]
+    messages: int
+    first_seq: int | None
+    last: Sequenced | None
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    cursor: int
+    conversations: tuple[ConversationSummary, ...]
+
+
+@dataclass(frozen=True)
+class Page:
+    summary: ConversationSummary
+    messages: tuple[Sequenced, ...]
+    files: Mapping[str, Sequence[Attachment]]
+    more: bool
+
+
+@dataclass(frozen=True)
+class Batch:
+    cursor: int
+    messages: tuple[Sequenced, ...]
+    files: Mapping[str, Sequence[Attachment]]
+    touched: tuple[ConversationSummary, ...]
+    full: bool
 
 
 @dataclass(frozen=True)

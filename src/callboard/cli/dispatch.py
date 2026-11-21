@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from importlib.metadata import PackageNotFoundError, version
 
+from callboard.cli.admin import admin
 from callboard.cli.chat import dm, group, mail
 from callboard.cli.commands import join, who
 from callboard.cli.doctor import doctor
@@ -18,6 +19,7 @@ from callboard.trace import working_directory
 type Command = Callable[[argparse.Namespace, Runtime], int]
 
 COMMANDS: Mapping[str, Command] = {
+    "admin": admin,
     "attachment": attachment,
     "dm": dm,
     "doctor": doctor,

@@ -8,6 +8,8 @@ User guides:
 - [Chat](user/chat.md): direct messages, groups, reading, receipts, attachments, pings.
 - [Mail](user/mail.md): threads with a subject, to and cc.
 - [JSON output](user/json.md): the `--json` contract, exit codes and error codes.
+- [Admin](user/admin.md): `admin conversations`, `admin history` and `admin watch`, which
+  read every conversation and mark nothing read.
 
 For agents:
 
