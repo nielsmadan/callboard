@@ -147,6 +147,7 @@ jobs:
             "$RELEASE_TAG" "$RUNNER_TEMP/source.tar.gz" "$RUNNER_TEMP/formula/callboard.rb"
       - name: Install and test through Homebrew
         run: |
+          brew tap nielsmadan/tap
           brew tap-new --no-git nielsmadan/callboard-release-test
           cp "$RUNNER_TEMP/formula/callboard.rb" \
             "$(brew --repository nielsmadan/callboard-release-test)/Formula/callboard.rb"
