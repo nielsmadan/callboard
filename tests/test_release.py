@@ -167,7 +167,7 @@ def test_the_release_policy_runs_recipes_the_justfile_defines() -> None:
     stage_commands = [
         command for stage in policy["stages"] for command in stage["commands"] + stage["checks"]
     ]
-    named = {command[1] for command in policy["checks"] + stage_commands if command[0] == "just"}
+    named = {command[1] for command in policy["preflight"] + stage_commands if command[0] == "just"}
 
     assert named
     assert named <= set(RECIPE.findall((ROOT / "Justfile").read_text()))

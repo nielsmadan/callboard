@@ -7,7 +7,7 @@
   "sign": true,
   "tag_prefix": "v",
   "tools": ["git", "uv", "uvx", "just"],
-  "checks": [["just", "check-static"], ["just", "coverage"]],
+  "preflight": [["just", "check-static"], ["just", "coverage"]],
   "stages": [
     {
       "files": ["pyproject.toml", "uv.lock", "CHANGELOG.md"],
@@ -20,5 +20,5 @@
       "message": "chore: release {version}"
     }
   ],
-  "publication": "GitHub Actions verifies the tagged source, publishes a GitHub release with the wheel and source distribution, and updates the Homebrew formula."
+  "success_message": "GitHub Actions verifies the tagged source, publishes a GitHub release with the wheel and source distribution, and updates the Homebrew formula."
 }

@@ -36,7 +36,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.sha }}
-      - uses: nielsmadan/curtaincall@v1.4.0
+      - uses: nielsmadan/curtaincall@v2.0.1
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.13"
@@ -172,7 +172,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.sha }}
-      - uses: nielsmadan/curtaincall@v1.4.0
+      - uses: nielsmadan/curtaincall@v2.0.1
       - name: Revalidate release commit
         env:
           RELEASE_COMMIT: ${{ needs.verify.outputs.release-commit }}
