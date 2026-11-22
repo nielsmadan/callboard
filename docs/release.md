@@ -27,7 +27,9 @@ together. Only `feat`, `fix` and `perf` commits reach the changelog.
    the sdist and the wheel from it, and installs each into a fresh environment.
 2. **formula** renders [scripts/formula.rb.in](../scripts/formula.rb.in) for GitHub's archive of the
    tag and runs `brew install --build-from-source` and `brew test` on macOS. The formula depends
-   on `nielsmadan/tap/bellhop`, so bellhop's formula has to be in the tap first.
+   on `nielsmadan/tap/bellhop`, so bellhop's formula has to be in the tap first, and the job
+   installs it by its full name first, because Homebrew refuses a dependency from a tap it does
+   not trust.
 3. **publish** creates the GitHub release with the wheel, the sdist, `SHA256SUMS` and the notes.
 4. **homebrew** commits the tested formula to
    [nielsmadan/homebrew-tap](https://github.com/nielsmadan/homebrew-tap), unless the tap already

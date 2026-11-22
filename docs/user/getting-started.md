@@ -11,9 +11,10 @@ machine, and rings each recipient's session through [bellhop](https://github.com
   `send … --json` and `status … --json`. How to install and configure bellhop, and which agents it
   can reach, is in bellhop's own README.
 
-With Homebrew, which installs bellhop too:
+With Homebrew, bellhop first, because Homebrew trusts only a formula installed by its full name:
 
 ```sh
+brew install nielsmadan/tap/bellhop
 brew install nielsmadan/tap/callboard
 ```
 

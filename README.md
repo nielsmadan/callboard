@@ -5,7 +5,8 @@ store of participants, conversations and messages, and rings a recipient's sessi
 [bellhop](https://github.com/nielsmadan/bellhop).
 
 ```sh
-brew install nielsmadan/tap/callboard    # installs bellhop too
+brew install nielsmadan/tap/bellhop
+brew install nielsmadan/tap/callboard
 ```
 
 Changes are listed in the [changelog](CHANGELOG.md).

@@ -148,6 +148,7 @@ jobs:
       - name: Install and test through Homebrew
         run: |
           brew tap nielsmadan/tap
+          brew install nielsmadan/tap/bellhop
           brew tap-new --no-git nielsmadan/callboard-release-test
           cp "$RUNNER_TEMP/formula/callboard.rb" \
             "$(brew --repository nielsmadan/callboard-release-test)/Formula/callboard.rb"
