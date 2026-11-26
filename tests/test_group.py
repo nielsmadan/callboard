@@ -186,6 +186,7 @@ def test_group_changes_print_json(cb: Callboard) -> None:
         "conversation": "group:ops",
         "name": "ops",
         "project": None,
+        "open": False,
         "members": ["enki", "nanna"],
     }
     added = cb("--as", "enki", "group", "add", "ops", "utu", "--json").json()
@@ -194,3 +195,79 @@ def test_group_changes_print_json(cb: Callboard) -> None:
     assert again == {**ok, **group, "added": False}
     removed = cb("--as", "enki", "group", "remove", "ops", "utu", "--json").json()
     assert removed == {**ok, **group, "group_deleted": False}
+
+
+def test_an_open_group_needs_no_members_and_says_it_is_open(cb: Callboard) -> None:
+    result = cb("--as", "enki", "group", "create", "bellhop", "--open")
+    assert result == (0, "created group:bellhop (open; members: enki)\n", "")
+    payload = cb("--as", "enki", "group", "create", "ops", "--open", "--members", "nanna", "--json")
+    assert payload.json() == {
+        "schema_version": 1,
+        "status": "ok",
+        "warnings": [],
+        "conversation": "group:ops",
+        "name": "ops",
+        "project": None,
+        "open": True,
+        "members": ["enki", "nanna"],
+    }
+
+
+def test_a_group_without_members_or_open_is_a_usage_error(cb: Callboard) -> None:
+    result = cb("--as", "enki", "group", "create", "ops")
+    assert result == (2, "", "callboard: group create needs --members or --open\n")
+    assert rows("SELECT count(*) FROM conversations") == [(0,)]
+
+
+def test_anyone_who_joined_callboard_can_join_an_open_group_and_post(cb: Callboard) -> None:
+    assert cb("--as", "enki", "group", "create", "bellhop", "--open").code == 0
+    assert cb("--as", "utu", "group", "join", "bellhop") == (0, "joined group:bellhop\n", "")
+    assert rows("SELECT handle FROM members ORDER BY handle") == [("enki",), ("utu",)]
+    assert cb("--as", "utu", "group", "send", "bellhop", "starting the parser fix").code == 0
+    assert cb("--as", "utu", "group", "join", "bellhop", "--json").json() == {
+        "schema_version": 1,
+        "status": "ok",
+        "warnings": [],
+        "conversation": "group:bellhop",
+        "handle": "utu",
+        "joined": False,
+    }
+
+
+def test_joining_a_closed_group_is_refused_and_names_the_way_in(cb: Callboard, ops: None) -> None:
+    result = cb("--as", "utu", "group", "join", "ops", "--json")
+    assert (result.code, result.json()["error"]) == (
+        1,
+        {
+            "code": "group_closed",
+            "message": "group:ops is not open; ask a member to run: callboard group add ops utu",
+        },
+    )
+    assert rows("SELECT handle FROM members ORDER BY handle") == [
+        ("enki",),
+        ("nanna",),
+        ("niels",),
+    ]
+
+
+def test_a_member_of_a_closed_group_is_told_it_is_already_in(cb: Callboard, ops: None) -> None:
+    assert cb("--as", "nanna", "group", "join", "ops") == (0, "nanna is already in group:ops\n", "")
+
+
+def test_joining_a_group_that_does_not_exist_is_not_found(cb: Callboard) -> None:
+    result = cb("--as", "utu", "group", "join", "ghost", "--json")
+    assert (result.code, result.json()["error"]) == (
+        3,
+        {"code": "conversation_not_found", "message": "no conversation group:ghost"},
+    )
+
+
+def test_a_session_that_has_not_joined_callboard_cannot_join_a_group(cb: Callboard) -> None:
+    assert cb("--as", "enki", "group", "create", "bellhop", "--open").code == 0
+    result = cb("--as", "ghost", "group", "join", "bellhop")
+    assert result == (
+        3,
+        "",
+        "callboard: --as: no participant 'ghost'; run: callboard join ghost\n",
+    )
+    assert rows("SELECT handle FROM members") == [("enki",)]

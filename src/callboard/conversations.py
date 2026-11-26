@@ -2,7 +2,7 @@ import sqlite3
 from collections.abc import Sequence
 
 from callboard.errors import CallboardError
-from callboard.models import Conversation
+from callboard.models import Conversation, NewGroup
 from callboard.refs import dm_id, ref_of
 from callboard.store import participant, write
 
@@ -69,30 +69,25 @@ def ensure_dm(conn: sqlite3.Connection, sender: str, recipient: str, now: str) -
 
 
 def create_group(
-    conn: sqlite3.Connection,
-    name: str,
-    creator: str,
-    handles: Sequence[str],
-    project: str | None,
-    now: str,
+    conn: sqlite3.Connection, group: NewGroup, creator: str, handles: Sequence[str], now: str
 ) -> Conversation:
-    conversation_id = f"group:{name}"
+    conversation_id = f"group:{group.name}"
     everyone = sorted({creator, *handles})
     with write(conn):
         require_participants(conn, everyone)
         if conversation(conn, conversation_id) is not None:
             raise CallboardError(f"{conversation_id} already exists", code="group_exists")
         conn.execute(
-            "INSERT INTO conversations (id, kind, name, project, created_by, created_at)"
-            " VALUES (?, 'group', ?, ?, ?, ?)",
-            (conversation_id, name, project, creator, now),
+            "INSERT INTO conversations (id, kind, name, project, created_by, created_at, open)"
+            " VALUES (?, 'group', ?, ?, ?, ?, ?)",
+            (conversation_id, group.name, group.project, creator, now, int(group.joinable)),
         )
         conn.executemany(
             "INSERT INTO members (conversation_id, handle, role, joined_at)"
             " VALUES (?, ?, 'member', ?)",
             [(conversation_id, handle, now) for handle in everyone],
         )
-    return Conversation(conversation_id, "group", name, None, project, creator, now)
+    return Conversation(conversation_id, "group", group.name, None, group.project, creator, now)
 
 
 def add_member(conn: sqlite3.Connection, name: str, caller: str, handle: str, now: str) -> bool:
@@ -106,6 +101,32 @@ def add_member(conn: sqlite3.Connection, name: str, caller: str, handle: str, no
             (conversation_id, handle, now),
         )
     return cursor.rowcount == 1
+
+
+def join_group(conn: sqlite3.Connection, name: str, caller: str, now: str) -> bool:
+    conversation_id = f"group:{name}"
+    with write(conn):
+        row = conn.execute(
+            "SELECT open FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+        if row is None:
+            raise CallboardError(
+                f"no conversation {conversation_id}", code="conversation_not_found"
+            )
+        if caller in members(conn, conversation_id):
+            return False
+        if not row["open"]:
+            raise CallboardError(
+                f"{conversation_id} is not open; ask a member to run:"
+                f" callboard group add {name} {caller}",
+                code="group_closed",
+            )
+        conn.execute(
+            "INSERT INTO members (conversation_id, handle, role, joined_at)"
+            " VALUES (?, ?, 'member', ?)",
+            (conversation_id, caller, now),
+        )
+    return True
 
 
 def remove_member(conn: sqlite3.Connection, name: str, caller: str, handle: str) -> bool:

@@ -78,7 +78,11 @@ SCHEMA_V2: tuple[str, ...] = (
     "CREATE INDEX attachments_message ON attachments (message_id)",
 )
 
-MIGRATIONS: tuple[tuple[str, ...], ...] = (SCHEMA_V1, SCHEMA_V2)
+SCHEMA_V3: tuple[str, ...] = (
+    "ALTER TABLE conversations ADD COLUMN open INTEGER NOT NULL DEFAULT 0",
+)
+
+MIGRATIONS: tuple[tuple[str, ...], ...] = (SCHEMA_V1, SCHEMA_V2, SCHEMA_V3)
 
 
 class _Executes(Protocol):

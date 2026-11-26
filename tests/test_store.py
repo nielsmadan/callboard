@@ -94,7 +94,7 @@ def test_a_newer_schema_is_refused(tmp_path: Path) -> None:
     assert (caught.value.code, caught.value.exit_code, str(caught.value)) == (
         "schema_too_new",
         1,
-        "store schema version 7 is newer than this callboard supports (2); upgrade callboard",
+        "store schema version 7 is newer than this callboard supports (3); upgrade callboard",
     )
 
 
@@ -262,3 +262,19 @@ def test_a_failed_read_ends_its_transaction(tmp_path: Path) -> None:
             conn.execute("SELECT count(*) FROM participants").fetchone()
             raise KeyError("stop")
         assert conn.in_transaction is False
+
+
+def test_groups_from_before_open_groups_migrate_as_closed(tmp_path: Path) -> None:
+    path = tmp_path / "callboard.sqlite"
+    with closing(connect(path)) as conn:
+        migrate(conn, MIGRATIONS[:2])
+        conn.execute(
+            "INSERT INTO participants (handle, kind, created_at) VALUES ('enki', 'agent', 't')"
+        )
+        conn.execute(
+            "INSERT INTO conversations (id, kind, name, created_by, created_at)"
+            " VALUES ('group:ops', 'group', 'ops', 'enki', 't')"
+        )
+    with closing(open_store(path)) as conn:
+        found = conn.execute("SELECT id, open FROM conversations").fetchall()
+        assert [tuple(row) for row in found] == [("group:ops", 0)]

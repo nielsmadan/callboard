@@ -71,7 +71,8 @@ $ callboard group send release "@utu can you tag 0.2 once CI is green? nanna, fy
 sent cb_e89d41083252 to group:release (mentions @utu)
 ```
 
-`callboard group add release <handle>` and `group remove` change the members.
+`callboard group add release <handle>` and `group remove` change the members. A group made with
+`group create <name> --open` is joined with `callboard group join <name>`; a closed one refuses (exit 1).
 
 ## Mail
 

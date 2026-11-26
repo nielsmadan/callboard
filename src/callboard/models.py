@@ -62,6 +62,13 @@ class Conversation:
 
 
 @dataclass(frozen=True)
+class NewGroup:
+    name: str
+    project: str | None
+    joinable: bool
+
+
+@dataclass(frozen=True)
 class Message:
     id: str
     conversation_id: str

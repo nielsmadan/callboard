@@ -42,7 +42,8 @@ without `--urgent`, never starts anyone.
 callboard join <handle> [--human] [--json]        # join as <handle> from this agent session
 callboard who [--json]                            # list participants
 callboard dm <to> [TEXT] [--attach PATH]... [--now] [--no-ping] [--reply-to MESSAGE] [--json]
-callboard group create <name> --members a,b,c [--project P] [--json]
+callboard group create <name> [--members a,b,c] [--open] [--project P] [--json]
+callboard group join <name> [--json]             # join a group created with --open
 callboard group add|remove <name> <handle> [--json]
 callboard group send <name> [TEXT] [--attach PATH]... [--now] [--reply-to MESSAGE] [--json]
 callboard mail send --to a[,b] [--cc c[,d]] --subject S [TEXT] [--attach PATH]... [--urgent] [--json]

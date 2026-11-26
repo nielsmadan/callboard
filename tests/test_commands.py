@@ -269,12 +269,12 @@ def test_who_with_an_unknown_as_handle_exits_3_with_the_json_envelope(
 def test_who_on_a_newer_schema_exits_1(capsys: pytest.CaptureFixture[str]) -> None:
     assert _callboard("join", "niels", "--human") == 0
     with closing(sqlite3.connect(store_path(os.environ))) as conn:
-        conn.execute("UPDATE meta SET value = '3' WHERE key = 'schema_version'")
+        conn.execute("UPDATE meta SET value = '4' WHERE key = 'schema_version'")
         conn.commit()
     capsys.readouterr()
     assert _callboard("who") == 1
     assert capsys.readouterr().err == (
-        "callboard: store schema version 3 is newer than this callboard supports (2);"
+        "callboard: store schema version 4 is newer than this callboard supports (3);"
         " upgrade callboard\n"
     )
 

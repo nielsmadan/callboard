@@ -87,7 +87,7 @@ def test_all_routes_resolving_passes_in_text(
     assert capsys.readouterr() == (
         (
             f"ok    data_dir  {data_dir(os.environ)}\n"
-            "ok    store     schema version 2, 1 participants\n"
+            "ok    store     schema version 3, 1 participants\n"
             f"ok    bellhop   {FAKES / 'bellhop'}\n"
             "ok    routes    1 routes resolve\n"
             f"ok    config    {config_path(os.environ)} absent; using the defaults\n"
@@ -163,18 +163,18 @@ def test_data_dir_checks(tmp_path: Path) -> None:
 def test_store_checks(tmp_path: Path) -> None:
     path = tmp_path / "callboard.sqlite"
     open_store(path).close()
-    assert check_store(path) == (Check("store", "ok", "schema version 2, 0 participants"), [])
+    assert check_store(path) == (Check("store", "ok", "schema version 3, 0 participants"), [])
     with closing(sqlite3.connect(path)) as conn:
-        conn.execute("UPDATE meta SET value = '3' WHERE key = 'schema_version'")
+        conn.execute("UPDATE meta SET value = '4' WHERE key = 'schema_version'")
         conn.commit()
     assert check_store(path) == (
-        Check("store", "fail", "schema version 3 is newer than this callboard (2)"),
+        Check("store", "fail", "schema version 4 is newer than this callboard (3)"),
         [],
     )
     empty = tmp_path / "empty.sqlite"
     sqlite3.connect(empty).close()
     assert check_store(empty) == (
-        Check("store", "warn", "schema version 0; migrates to 2 on next use"),
+        Check("store", "warn", "schema version 0; migrates to 3 on next use"),
         [],
     )
     corrupt = tmp_path / "corrupt.sqlite"

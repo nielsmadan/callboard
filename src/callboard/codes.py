@@ -8,6 +8,7 @@ type Code = Literal[
     "bellhop_failed",
     "conversation_not_found",
     "doctor_failed",
+    "group_closed",
     "group_exists",
     "handle_taken",
     "hls_unavailable",
@@ -35,6 +36,7 @@ HLS_UNAVAILABLE: Code = "hls_unavailable"
 IDENTITY_AMBIGUOUS: Code = "identity_ambiguous"
 IDENTITY_NOT_FOUND: Code = "identity_not_found"
 CONVERSATION_NOT_FOUND: Code = "conversation_not_found"
+GROUP_CLOSED: Code = "group_closed"
 GROUP_EXISTS: Code = "group_exists"
 HANDLE_TAKEN: Code = "handle_taken"
 MESSAGE_NOT_FOUND: Code = "message_not_found"
@@ -65,6 +67,7 @@ EXIT_CODES: Mapping[Code, int] = MappingProxyType(
         IDENTITY_AMBIGUOUS: NOT_FOUND_EXIT,
         IDENTITY_NOT_FOUND: NOT_FOUND_EXIT,
         CONVERSATION_NOT_FOUND: NOT_FOUND_EXIT,
+        GROUP_CLOSED: FAILURE_EXIT,
         GROUP_EXISTS: FAILURE_EXIT,
         HANDLE_TAKEN: FAILURE_EXIT,
         MESSAGE_NOT_FOUND: NOT_FOUND_EXIT,

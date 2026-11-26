@@ -133,9 +133,13 @@ def _add_chat(commands: "argparse._SubParsersAction[_Parser]") -> None:
     actions.required = True
     create = actions.add_parser("create", parents=[_as_flag()], help="create a group")
     create.add_argument("name")
-    create.add_argument("--members", type=_handles, action="extend", required=True, metavar="A,B,C")
+    create.add_argument("--members", type=_handles, action="extend", default=[], metavar="A,B,C")
+    create.add_argument("--open", action="store_true", help="let any participant join")
     create.add_argument("--project", metavar="P")
     create.add_argument("--json", action="store_true", help="print one JSON object")
+    join = actions.add_parser("join", parents=[_as_flag()], help="join an open group")
+    join.add_argument("name")
+    join.add_argument("--json", action="store_true", help="print one JSON object")
     for action, verb in (("add", "add a member"), ("remove", "remove a member")):
         change = actions.add_parser(action, parents=[_as_flag()], help=verb)
         change.add_argument("name")

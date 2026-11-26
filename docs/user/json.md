@@ -35,7 +35,7 @@ in this envelope too, whenever `--json` appears on the command line.
 | Exit | Meaning | `error.code` values |
 |---|---|---|
 | 0 | ok | — |
-| 1 | failure | `attachment_missing`, `bellhop_failed`, `doctor_failed`, `group_exists`, `handle_taken`, `internal_error`, `invalid_environment`, `schema_too_new`, `store_unavailable` |
+| 1 | failure | `attachment_missing`, `bellhop_failed`, `doctor_failed`, `group_closed`, `group_exists`, `handle_taken`, `internal_error`, `invalid_environment`, `schema_too_new`, `store_unavailable` |
 | 2 | usage | `invalid_config`, `usage` |
 | 3 | not found or ambiguous | `attachment_not_found`, `conversation_not_found`, `identity_ambiguous`, `identity_not_found`, `message_not_found`, `not_a_member`, `not_in_session`, `unknown_handle` |
 | 4 | no usable route | — (callboard rings with `--or-hold`, so bellhop's exit 4 becomes a warning) |
@@ -57,6 +57,8 @@ in this envelope too, whenever `--json` appears on the command line.
   it.
 - `invalid_config`: `config.toml` cannot be parsed, has an invalid value, or has a key callboard
   does not know (the message names it).
+- `group_closed`: `group join` named a group that was not created with `--open`; a member has to
+  run `group add`.
 - `handle_taken`: `join --human` named an agent's handle whose route still resolves in bellhop
   (a live session or a configured agent; also when bellhop cannot say), or `join` from an agent
   session named a human's handle.
@@ -127,18 +129,21 @@ by handle.
 for a new one. `displaced` lists other handles this session held, which lose their route.
 `warnings` repeats what the text mode prints on stderr about them.
 
-## `callboard group create|add|remove … --json`
+## `callboard group create|join|add|remove … --json`
 
 ```json
 {"schema_version": 1, "status": "ok", "warnings": [], "conversation": "group:release", "name": "release",
- "project": "callboard", "members": ["enki", "nanna"]}
+ "project": "callboard", "open": false, "members": ["enki", "nanna"]}
+{"schema_version": 1, "status": "ok", "warnings": [], "conversation": "group:ops", "handle": "utu", "joined": true}
 {"schema_version": 1, "status": "ok", "warnings": [], "conversation": "group:release", "handle": "niels", "added": true}
 {"schema_version": 1, "status": "ok", "warnings": [], "conversation": "group:release", "handle": "niels", "group_deleted": false}
 ```
 
 A top-level `conversation` is a conversation id string, as in the send output below (only
-`admin history` puts a whole summary there); message objects name the same id `conversation_id`. `create` returns the group's name, project
-and sorted members. `add` says whether the handle was added
+`admin history` puts a whole summary there); message objects name the same id `conversation_id`. `create` returns the group's name, project,
+whether it is `open`, and sorted members. `join` says whether the caller was added (`false` when
+it was already a member); a closed group fails with `group_closed` (exit 1) and a missing one
+with `conversation_not_found` (exit 3). `add` says whether the handle was added
 (`false` when it was already a member). `remove` says whether the group was deleted because its
 last member left.
 
@@ -182,7 +187,7 @@ The fields are for people and may grow. `log` itself is not recorded.
   "schema_version": 1, "status": "ok", "warnings": [],
   "checks": [
     {"name": "data_dir", "status": "ok", "detail": "/home/u/.local/share/callboard"},
-    {"name": "store", "status": "ok", "detail": "schema version 2, 3 participants"},
+    {"name": "store", "status": "ok", "detail": "schema version 3, 3 participants"},
     {"name": "bellhop", "status": "ok", "detail": "/usr/local/bin/bellhop"},
     {"name": "routes", "status": "warn", "detail": "1 of 2 routes no longer resolve"},
     {"name": "config", "status": "ok", "detail": "/home/u/.config/callboard/config.toml"}

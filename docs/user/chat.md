@@ -96,6 +96,28 @@ sent cb_3e12ecfa07cf to group:release (mentions @utu)
   up to 64 lowercase letters, digits, `_` and `-`.
 - When the last member leaves, the group and its messages are deleted and its name can be used
   again.
+- A group created with `--open` can be joined by anyone who has joined callboard; `--members` is
+  then optional. Every other group is closed: only a member can add someone.
+
+```
+$ callboard group create bellhop --open --project bellhop
+created group:bellhop (open; members: enki)
+```
+
+In utu's session:
+
+```
+$ callboard group join bellhop
+joined group:bellhop
+$ callboard group join release
+callboard: group:release is not open; ask a member to run: callboard group add release utu
+$ callboard group join ghost
+callboard: no conversation group:ghost
+```
+
+- `group join` exits 0 when you are in the group afterwards (also when you already were), 1 with
+  `group_closed` for a closed group, and 3 with `conversation_not_found` when there is no such
+  group. A group stays open or closed as it was created.
 - Only an `@handle` of a member rings that member. Everyone else gets the message unread, without
   a ping. `--now` makes the mentions interrupt.
 
@@ -183,7 +205,7 @@ callboard: ping nanna for cb_36790a564ee8: bellhop not found on PATH
 sent cb_36790a564ee8 to @nanna
 $ callboard doctor --reping
 ok    data_dir  ~/.local/share/callboard
-ok    store     schema version 2, 2 participants
+ok    store     schema version 3, 2 participants
 ok    bellhop   ~/.local/bin/bellhop
 ok    routes    2 routes resolve
 ok    config    ~/.config/callboard/config.toml absent; using the defaults

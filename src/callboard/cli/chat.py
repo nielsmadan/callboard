@@ -11,6 +11,7 @@ from callboard.cli.rendering import receipt_json
 from callboard.conversations import (
     add_member,
     create_group,
+    join_group,
     remove_member,
     require_member,
     require_participants,
@@ -20,7 +21,7 @@ from callboard.identity import validate_handle
 from callboard.jsonout import ok_payload
 from callboard.mail import addressees, reply_mail, require_mail_thread, send_mail
 from callboard.messages import send_direct, send_group
-from callboard.models import Attachment, Message, Receipt, Runtime
+from callboard.models import Attachment, Message, NewGroup, Receipt, Runtime
 from callboard.receipts import receipts as receipts_of
 from callboard.refs import ref_of
 
@@ -147,18 +148,36 @@ def _group_send(args: argparse.Namespace, runtime: Runtime) -> int:
 def _group_create(args: argparse.Namespace, runtime: Runtime) -> int:
     name = validate_handle(args.name, "group")
     handles = [validate_handle(handle, "--members") for handle in args.members]
+    if not handles and not args.open:
+        raise CallboardError("group create needs --members or --open", code="usage")
     with as_caller(args, runtime, bellhop(runtime, settings(runtime))) as (conn, caller):
-        created = create_group(conn, name, caller.handle, handles, args.project, runtime.clock())
+        wanted = NewGroup(name, args.project, args.open)
+        created = create_group(conn, wanted, caller.handle, handles, runtime.clock())
     everyone = sorted({caller.handle, *handles})
     payload = ok_payload(
         {
             "conversation": created.id,
             "name": created.name,
             "project": created.project,
+            "open": args.open,
             "members": everyone,
         }
     )
-    emit(payload, [f"created {created.id} (members: {', '.join(everyone)})"], json_mode=args.json)
+    kind = "open; " if args.open else ""
+    line = f"created {created.id} ({kind}members: {', '.join(everyone)})"
+    emit(payload, [line], json_mode=args.json)
+    return 0
+
+
+def _group_join(args: argparse.Namespace, runtime: Runtime) -> int:
+    name = validate_handle(args.name, "group")
+    with as_caller(args, runtime, bellhop(runtime, settings(runtime))) as (conn, caller):
+        joined = join_group(conn, name, caller.handle, runtime.clock())
+    line = f"joined group:{name}" if joined else f"{caller.handle} is already in group:{name}"
+    payload = ok_payload(
+        {"conversation": f"group:{name}", "handle": caller.handle, "joined": joined}
+    )
+    emit(payload, [line], json_mode=args.json)
     return 0
 
 
@@ -189,6 +208,7 @@ def _group_remove(args: argparse.Namespace, runtime: Runtime) -> int:
 GROUP_ACTIONS = {
     "add": _group_add,
     "create": _group_create,
+    "join": _group_join,
     "remove": _group_remove,
     "send": _group_send,
 }
