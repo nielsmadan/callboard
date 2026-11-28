@@ -2,6 +2,12 @@
 
 User-facing changes to callboard. While it is on `0.x`, a minor release may break things.
 
+## 0.2.0 - 2026-11-28
+
+### Features
+
+- Add open groups
+
 ## 0.1.0 - 2026-11-21
 
 ### Features
